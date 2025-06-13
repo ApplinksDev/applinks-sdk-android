@@ -1,0 +1,18 @@
+{
+  "name": "Android Library Development",
+  "dockerFile": "Dockerfile",
+  "extensions": [
+    "vscjava.vscode-java-pack",
+    "redhat.java",
+    "ms-azuretools.vscode-docker",
+    // Kotlin support
+    "fwcd.kotlin",
+  ],
+  // "postCreateCommand": "chmod +x gradlew && ./gradlew build",
+  "remoteUser": "ubuntu",
+  "runArgs": [
+    "--privileged",
+    "-v",
+    "/dev/bus/usb:/dev/bus/usb"
+  ]
+}

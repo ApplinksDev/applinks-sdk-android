@@ -12,7 +12,15 @@
   "remoteUser": "ubuntu",
   "runArgs": [
     "--privileged",
+    // Uncomment the following lines if you need to access USB devices or Wayland display
     "-v",
-    "/dev/bus/usb:/dev/bus/usb"
-  ]
+    "/dev/bus/usb:/dev/bus/usb",
+    "-e", "WAYLAND_DISPLAY=${localEnv:WAYLAND_DISPLAY}",
+    "-v", "${localEnv:XDG_RUNTIME_DIR}/${localEnv:WAYLAND_DISPLAY}:${localEnv:XDG_RUNTIME_DIR}/${localEnv:WAYLAND_DISPLAY}",
+    "-e", "XDG_RUNTIME_DIR=${localEnv:XDG_RUNTIME_DIR}",
+    "--device", "/dev/dri"
+  ],
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0.5": {}
+  }
 }

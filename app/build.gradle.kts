@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application") version "8.4.0"
     id("org.jetbrains.kotlin.android") version "2.1.21"
+    id("androidx.navigation.safeargs.kotlin") version "2.7.6"
 }
 
 android {
@@ -8,7 +9,7 @@ android {
     compileSdk = 34
     
     defaultConfig {
-        applicationId = "com.applinks.android.demo"
+        applicationId = "app.sweepy.sweepy"
         minSdk = 21
         targetSdk = 34
         versionCode = 1
@@ -38,4 +39,8 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    
+    // Navigation Component
+    implementation("androidx.navigation:navigation-fragment-ktx:2.7.6")
+    implementation("androidx.navigation:navigation-ui-ktx:2.7.6")
 }

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main_navigation"
+    app:startDestination="@id/homeFragment">
+
+    <fragment
+        android:id="@+id/homeFragment"
+        android:name="com.applinks.android.demo.HomeFragment"
+        android:label="AppLinks Demo"
+        tools:layout="@layout/fragment_home">
+        
+        <action
+            android:id="@+id/action_home_to_product"
+            app:destination="@id/productFragment" />
+            
+        <action
+            android:id="@+id/action_home_to_promo"
+            app:destination="@id/promoFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/productFragment"
+        android:name="com.applinks.android.demo.ProductFragment"
+        android:label="Product Details"
+        tools:layout="@layout/fragment_product">
+        
+        <argument
+            android:name="productId"
+            app:argType="string" />
+            
+        <argument
+            android:name="productName"
+            app:argType="string"
+            android:defaultValue="Unknown Product" />
+        
+        <!-- Universal links -->
+        <deepLink
+            android:id="@+id/deepLinkProduct"
+            app:uri="https://example.com/product/{productId}" />
+            
+        <deepLink
+            android:id="@+id/deepLinkProductWithName"
+            app:uri="https://example.com/p/{productId}/{productName}" />
+            
+        <!-- Custom scheme links -->
+        <deepLink
+            android:id="@+id/deepLinkProductScheme"
+            app:uri="applinks://product/{productId}" />
+    </fragment>
+    
+    <fragment
+        android:id="@+id/promoFragment"
+        android:name="com.applinks.android.demo.PromoFragment"
+        android:label="Special Promotion"
+        tools:layout="@layout/fragment_promo">
+        
+        <argument
+            android:name="promoCode"
+            app:argType="string"
+            android:defaultValue="DEFAULT" />
+            
+        <argument
+            android:name="discount"
+            app:argType="integer"
+            android:defaultValue="10" />
+        
+        <!-- Deep links for promotions -->
+        <deepLink
+            android:id="@+id/deepLinkPromo"
+            app:uri="https://example.com/promo?code={promoCode}&amp;discount={discount}" />
+            
+        <deepLink
+            android:id="@+id/deepLinkPromoScheme"
+            app:uri="applinks://promo/{promoCode}" />
+    </fragment>
+
+</navigation>

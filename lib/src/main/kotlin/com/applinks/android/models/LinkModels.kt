@@ -23,7 +23,9 @@ data class LinkResponse(
     @SerialName("updated_at")
     val updatedAt: String,
     @SerialName("full_url")
-    val fullUrl: String
+    val fullUrl: String,
+    @SerialName("visit_id")
+    val visitId: String? = null
 )
 
 @Serializable
@@ -36,6 +38,11 @@ data class ErrorDetails(
     val status: String,
     val code: Int,
     val message: String
+)
+
+@Serializable
+data class RetrieveLinkRequest(
+    val url: String
 )
 
 @Serializable

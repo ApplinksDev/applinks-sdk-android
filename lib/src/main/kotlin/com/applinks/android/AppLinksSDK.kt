@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import com.applinks.android.api.AppLinksApiClient
 import com.applinks.android.handlers.*
+import com.applinks.android.middleware.*
 import com.applinks.android.storage.AppLinksPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,7 +17,7 @@ import kotlinx.coroutines.launch
 class AppLinksSDK private constructor(
     private val context: Context, 
     private val config: Config,
-    private val customHandlers: List<LinkHandler> = emptyList()
+    private val customMiddlewares: List<Middleware> = emptyList()
 ) {
     companion object {
         private const val TAG = "AppLinksSDK"
@@ -37,13 +38,13 @@ class AppLinksSDK private constructor(
         internal fun initialize(
             context: Context, 
             config: Config, 
-            customHandlers: List<LinkHandler>
+            customMiddlewares: List<Middleware>
         ): AppLinksSDK {
             synchronized(this) {
                 if (instance != null) {
                     Log.w(TAG, "AppLinksSDK already initialized")
                 }
-                instance = AppLinksSDK(context, config, customHandlers)
+                instance = AppLinksSDK(context, config, customMiddlewares)
                 return instance!!
             }
         }
@@ -65,41 +66,43 @@ class AppLinksSDK private constructor(
     )
     
     private val preferences = AppLinksPreferences(context)
-    private val linkHandlingManager = LinkHandlingManager(context, config.enableLogging)
-    private val installReferrerManager = InstallReferrerManager(context, apiClient, preferences, config.enableLogging)
+    private val middlewareChain = MiddlewareChain(context, config.enableLogging)
+    private val installReferrerManager = InstallReferrerManager(context, config.enableLogging)
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     
     init {
-        setupHandlers()
+        setupMiddlewares()
         checkForDeferredDeepLinkIfFirstLaunch()
     }
     
-    private fun setupHandlers() {
-        // Add Universal Link Handler if domains are configured
+    private fun setupMiddlewares() {
+        // Add logging middleware first
+        middlewareChain.addMiddleware(LoggingMiddleware(config.enableLogging))
+        
+        // Add Universal Link Middleware if domains are configured
         if (config.supportedDomains.isNotEmpty()) {
-            linkHandlingManager.addHandler(
-                UniversalLinkHandler(
+            middlewareChain.addMiddleware(
+                UniversalLinkMiddleware(
                     supportedDomains = config.supportedDomains,
-                    autoHandleLinks = config.autoHandleLinks,
+                    apiClient = apiClient,
                     enableLogging = config.enableLogging
                 )
             )
         }
         
-        // Add Custom Scheme Handler if schemes are configured
+        // Add Custom Scheme Middleware if schemes are configured
         if (config.supportedSchemes.isNotEmpty()) {
-            linkHandlingManager.addHandler(
-                CustomSchemeHandler(
+            middlewareChain.addMiddleware(
+                SchemeMiddleware(
                     supportedSchemes = config.supportedSchemes,
-                    autoHandleLinks = config.autoHandleLinks,
                     enableLogging = config.enableLogging
                 )
             )
         }
         
-        // Add custom handlers provided via builder
-        customHandlers.forEach { handler ->
-            linkHandlingManager.addHandler(handler)
+        // Add custom middlewares provided via builder
+        customMiddlewares.forEach { middleware ->
+            middlewareChain.addMiddleware(middleware)
         }
     }
     
@@ -108,15 +111,19 @@ class AppLinksSDK private constructor(
      */
     fun handleLink(uri: Uri, callback: LinkCallback) {
         coroutineScope.launch {
-            linkHandlingManager.handleLink(uri, object : LinkHandlerCallback {
-                override fun onLinkHandled(uri: Uri, metadata: Map<String, String>) {
-                    callback.onSuccess(uri.toString(), metadata)
-                }
-                
-                override fun onError(error: String) {
-                    callback.onError(error)
-                }
-            })
+            val context = LinkHandlingContext(
+                isFirstLaunch = preferences.isFirstLaunch
+            )
+            
+            val result = middlewareChain.processLink(uri, context)
+            
+            if (result.error != null) {
+                callback.onError(result.error)
+            } else {
+                // Convert metadata to String map for backward compatibility
+                val stringMetadata = result.metadata.mapValues { it.value.toString() }
+                callback.onSuccess(uri.toString(), stringMetadata)
+            }
         }
     }
     
@@ -143,40 +150,26 @@ class AppLinksSDK private constructor(
      */
     private fun checkForDeferredDeepLink() {
         coroutineScope.launch {
-            installReferrerManager.retrieveDeferredDeepLink(
-                object : InstallReferrerManager.DeferredLinkCallback {
-                    override fun onLinkRetrieved(uri: Uri, metadata: Map<String, String>) {
+            installReferrerManager.retrieveInstallReferrer(
+                object : InstallReferrerManager.InstallReferrerCallback {
+                    override fun onReferrerRetrieved(referrerData: InstallReferrerManager.ReferrerData) {
                         if (config.enableLogging) {
-                            Log.d(TAG, "Deferred deep link retrieved automatically: $uri")
+                            Log.d(TAG, "Install referrer retrieved: ${referrerData.installReferrer}")
                         }
                         
                         // Mark first launch as completed
                         preferences.markFirstLaunchCompleted()
                         
-                        // Handle the retrieved link using the standard link handlers
-                        coroutineScope.launch {
-                            linkHandlingManager.handleLink(uri, object : LinkHandlerCallback {
-                                override fun onLinkHandled(handledUri: Uri, handledMetadata: Map<String, String>) {
-                                    if (config.enableLogging) {
-                                        Log.d(TAG, "Deferred deep link handled automatically: $handledUri")
-                                    }
-                                }
-                                
-                                override fun onError(error: String) {
-                                    if (config.enableLogging) {
-                                        Log.w(TAG, "Error handling deferred deep link: $error")
-                                    }
-                                }
-                            })
-                        }
+                        // Process the referrer data
+                        
                     }
                     
                     override fun onError(error: String) {
                         if (config.enableLogging) {
-                            Log.d(TAG, "No deferred deep link found or error: $error")
+                            Log.d(TAG, "No install referrer found or error: $error")
                         }
                         
-                        // Mark first launch as completed even if no deferred link found
+                        // Mark first launch as completed even if no referrer found
                         preferences.markFirstLaunchCompleted()
                     }
                 }
@@ -193,10 +186,10 @@ class AppLinksSDK private constructor(
     }
     
     /**
-     * Add a custom link handler
+     * Add a custom middleware
      */
-    fun addCustomHandler(handler: LinkHandler) {
-        linkHandlingManager.addHandler(handler)
+    fun addCustomMiddleware(middleware: Middleware) {
+        middlewareChain.addMiddleware(middleware)
     }
     
     /**

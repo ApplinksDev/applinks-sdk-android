@@ -34,7 +34,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 
                 <data android:scheme="https" />
-                <data android:host="example.com" />
+                <data android:host="example.onapp.link" />
             </intent-filter>
             
             <!-- Navigation Component will handle the actual deep link routing -->

@@ -10,7 +10,6 @@ import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.setupActionBarWithNavController
 import com.applinks.android.AppLinksSDK
-import com.applinks.android.handlers.NavigationLinkHandler
 
 class MainActivity : AppCompatActivity() {
     
@@ -29,8 +28,7 @@ class MainActivity : AppCompatActivity() {
         val appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
         
-        // Add Navigation handler to AppLinks SDK
-        setupAppLinksNavigation()
+        // Navigation handler removed - using middleware pattern now
         
         // Handle intent if activity was launched with a deep link
         handleIntent(intent)
@@ -45,19 +43,6 @@ class MainActivity : AppCompatActivity() {
         return navController.navigateUp() || super.onSupportNavigateUp()
     }
     
-    private fun setupAppLinksNavigation() {
-        // Create Navigation handler
-        val navigationHandler = NavigationLinkHandler(
-            navControllerProvider = { navController },
-            navGraphId = R.navigation.main_navigation,
-            enableLogging = true
-        )
-        
-        // Add it to AppLinks SDK
-        AppLinksSDK.getInstance().addCustomHandler(navigationHandler)
-        
-        Log.d("MainActivity", "Navigation handler added to AppLinks SDK")
-    }
     
     private fun handleIntent(intent: Intent) {
         intent.data?.let { uri ->

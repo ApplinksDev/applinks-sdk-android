@@ -2,14 +2,14 @@ package com.applinks.android
 
 import android.content.Context
 import android.util.Log
-import com.applinks.android.handlers.LinkHandler
+import com.applinks.android.handlers.Middleware
 
 /**
  * Builder for AppLinksSDK initialization
  */
 class AppLinksSDKBuilder(private val context: Context) {
     private var config: AppLinksSDK.Config = AppLinksSDK.Config()
-    private val customHandlers = mutableListOf<LinkHandler>()
+    private val customMiddlewares = mutableListOf<Middleware>()
     
     fun config(config: AppLinksSDK.Config): AppLinksSDKBuilder {
         this.config = config
@@ -46,8 +46,8 @@ class AppLinksSDKBuilder(private val context: Context) {
         return this
     }
     
-    fun addCustomHandler(handler: LinkHandler): AppLinksSDKBuilder {
-        customHandlers.add(handler)
+    fun addCustomMiddleware(middleware: Middleware): AppLinksSDKBuilder {
+        customMiddlewares.add(middleware)
         return this
     }
     
@@ -68,7 +68,7 @@ class AppLinksSDKBuilder(private val context: Context) {
         return AppLinksSDK.initialize(
             context.applicationContext, 
             config,
-            customHandlers.toList()
+            customMiddlewares.toList()
         )
     }
 }

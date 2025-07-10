@@ -5,82 +5,100 @@ import android.net.Uri
 import android.util.Log
 
 /**
- * Manages multiple link handlers and routes links to the appropriate handler
+ * Manages a chain of middlewares that process links sequentially
  */
-class LinkHandlingManager(
+class MiddlewareChain(
     private val context: Context,
     private val enableLogging: Boolean = true
 ) {
     
     companion object {
-        private const val TAG = "LinkHandlingManager"
+        private const val TAG = "MiddlewareChain"
     }
     
-    private val handlers = mutableListOf<LinkHandler>()
+    private val middlewares = mutableListOf<Middleware>()
     
     /**
-     * Add a handler to the manager
+     * Add a middleware to the chain
      */
-    fun addHandler(handler: LinkHandler) {
-        handlers.add(handler)
-        // Sort by priority (highest first)
-        handlers.sortByDescending { it.getPriority() }
+    fun addMiddleware(middleware: Middleware) {
+        middlewares.add(middleware)
         
         if (enableLogging) {
-            Log.d(TAG, "Added handler: ${handler.javaClass.simpleName} with priority ${handler.getPriority()}")
+            Log.d(TAG, "Added middleware: ${middleware.javaClass.simpleName}")
         }
     }
     
     /**
-     * Remove a handler from the manager
+     * Remove a middleware from the chain
      */
-    fun removeHandler(handler: LinkHandler) {
-        handlers.remove(handler)
+    fun removeMiddleware(middleware: Middleware) {
+        middlewares.remove(middleware)
     }
     
     /**
-     * Clear all handlers
+     * Clear all middlewares
      */
-    fun clearHandlers() {
-        handlers.clear()
+    fun clearMiddlewares() {
+        middlewares.clear()
     }
     
     /**
-     * Process a URI with the appropriate handler
+     * Process a URI through the middleware chain
      */
-    suspend fun handleLink(uri: Uri, callback: LinkHandlerCallback) {
+    suspend fun processLink(uri: Uri, initialContext: LinkHandlingContext): LinkHandlingResult {
         if (enableLogging) {
-            Log.d(TAG, "Processing link: $uri")
+            Log.d(TAG, "Processing link through middleware chain: $uri")
         }
         
-        // Find the first handler that can handle this URI
-        val handler = handlers.firstOrNull { it.canHandle(uri) }
-        
-        if (handler != null) {
+        try {
+            val finalContext = processMiddlewares(0, initialContext, uri)
+            
+            // Create final result from processed context
+            return LinkHandlingResult(
+                handled = true,
+                originalUrl = uri,
+                path = finalContext.deepLinkPath ?: "",
+                params = finalContext.deepLinkParams,
+                metadata = finalContext.additionalData
+            )
+            
+        } catch (e: Exception) {
+            val error = "Error processing link through middleware chain: ${e.message}"
             if (enableLogging) {
-                Log.d(TAG, "Found handler: ${handler.javaClass.simpleName} for URI: $uri")
+                Log.e(TAG, error, e)
             }
-            handler.handle(context, uri, callback)
-        } else {
-            val error = "No handler found for URI: $uri"
-            if (enableLogging) {
-                Log.w(TAG, error)
-            }
-            callback.onError(error)
+            return LinkHandlingResult(
+                handled = false,
+                originalUrl = uri,
+                path = "",
+                error = error
+            )
         }
     }
     
     /**
-     * Check if any handler can handle the given URI
+     * Recursively process middlewares with next callback
      */
-    fun canHandle(uri: Uri): Boolean {
-        return handlers.any { it.canHandle(uri) }
+    private suspend fun processMiddlewares(index: Int, currentContext: LinkHandlingContext, uri: Uri): LinkHandlingContext {
+        if (index >= middlewares.size) {
+            return currentContext
+        }
+        
+        val middleware = middlewares[index]
+        if (enableLogging) {
+            Log.d(TAG, "Processing with middleware: ${middleware.javaClass.simpleName}")
+        }
+        
+        return middleware.process(currentContext, uri, context) { nextContext ->
+            processMiddlewares(index + 1, nextContext, uri)
+        }
     }
     
     /**
-     * Get all registered handlers
+     * Get all registered middlewares
      */
-    fun getHandlers(): List<LinkHandler> {
-        return handlers.toList()
+    fun getMiddlewares(): List<Middleware> {
+        return middlewares.toList()
     }
 }

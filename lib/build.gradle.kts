@@ -7,7 +7,7 @@
  */
 
 plugins {
-    id("com.android.library") version "8.4.0"
+    id("com.android.library") version "8.11.0"
     id("org.jetbrains.kotlin.android") version "2.1.21"
     kotlin("plugin.serialization") version "2.1.21"
 }

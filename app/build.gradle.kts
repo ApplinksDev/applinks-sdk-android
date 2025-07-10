@@ -1,5 +1,5 @@
 plugins {
-    id("com.android.application") version "8.4.0"
+    id("com.android.application") version "8.11.0"
     id("org.jetbrains.kotlin.android") version "2.1.21"
     id("androidx.navigation.safeargs.kotlin") version "2.7.6"
 }

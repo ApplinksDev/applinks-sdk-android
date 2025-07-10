@@ -3,14 +3,17 @@ package com.applinks.android.api
 import android.util.Log
 import com.applinks.android.models.ErrorResponse
 import com.applinks.android.models.LinkResponse
+import com.applinks.android.models.RetrieveLinkRequest
 import com.applinks.android.models.VisitDetailsResponse
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-internal class AppLinksApiClient(
+class AppLinksApiClient(
     private val serverUrl: String,
     private val apiKey: String?,
     private val enableLogging: Boolean = true
@@ -49,6 +52,20 @@ internal class AppLinksApiClient(
         return requestBuilder.build()
     }
     
+    private fun buildPostRequest(url: String, body: String): Request {
+        val requestBuilder = Request.Builder()
+            .url(url)
+            .post(body.toRequestBody("application/json".toMediaType()))
+            .addHeader("Accept", "application/json")
+            .addHeader("Content-Type", "application/json")
+        
+        apiKey?.let {
+            requestBuilder.addHeader("Authorization", "Bearer $it")
+        }
+        
+        return requestBuilder.build()
+    }
+    
     private inline fun <reified T> executeRequest(request: Request, resourceType: String): Result<T> {
         return try {
             client.newCall(request).execute().use { response ->
@@ -71,6 +88,17 @@ internal class AppLinksApiClient(
                                 Result.Error("Failed to parse response: ${e.message}")
                             }
                         } ?: Result.Error("Empty response body")
+                    }
+                    400 -> {
+                        val errorMessage = try {
+                            body?.let {
+                                val errorResponse = json.decodeFromString<ErrorResponse>(it)
+                                errorResponse.error.message
+                            } ?: "Bad request"
+                        } catch (e: Exception) {
+                            "Bad request"
+                        }
+                        Result.Error(errorMessage, 400)
                     }
                     401 -> Result.Error("Unauthorized: Invalid or missing API token", 401)
                     403 -> Result.Error("Forbidden: Access denied", 403)
@@ -101,13 +129,14 @@ internal class AppLinksApiClient(
         }
     }
     
-    fun fetchLink(linkId: String): Result<LinkResponse> {
+    fun retrieveLink(linkUrl: String): Result<LinkResponse> {
         if (enableLogging) {
-            Log.d(TAG, "Fetching link with ID: $linkId")
+            Log.d(TAG, "Retrieving link with URL: $linkUrl")
         }
         
-        val url = "$serverUrl/api/v1/links/$linkId"
-        val request = buildRequest(url)
+        val url = "$serverUrl/api/v1/public/links/retrieve"
+        val requestBody = json.encodeToString(RetrieveLinkRequest.serializer(), RetrieveLinkRequest(linkUrl))
+        val request = buildPostRequest(url, requestBody)
         
         return executeRequest<LinkResponse>(request, "link")
     }

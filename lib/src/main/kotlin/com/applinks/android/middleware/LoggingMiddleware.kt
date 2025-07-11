@@ -9,9 +9,7 @@ import com.applinks.android.handlers.Middleware
 /**
  * Middleware that logs the start and end of link processing
  */
-class LoggingMiddleware(
-    private val enableLogging: Boolean = true
-) : Middleware {
+class LoggingMiddleware : Middleware {
     
     companion object {
         private const val TAG = "LoggingMiddleware"
@@ -23,10 +21,6 @@ class LoggingMiddleware(
         androidContext: Context, 
         next: suspend (LinkHandlingContext) -> LinkHandlingContext
     ): LinkHandlingContext {
-        if (!enableLogging) {
-            return next(context)
-        }
-        
         val startTime = System.currentTimeMillis()
         
         Log.d(TAG, "Starting link processing: $uri")

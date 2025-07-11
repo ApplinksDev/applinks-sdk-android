@@ -11,7 +11,6 @@ import com.applinks.android.handlers.Middleware
  */
 class SchemeMiddleware(
     private val supportedSchemes: Set<String>,
-    private val enableLogging: Boolean = true
 ) : Middleware {
     
     companion object {
@@ -29,16 +28,11 @@ class SchemeMiddleware(
             return next(context)
         }
         
-        if (enableLogging) {
-            Log.d(TAG, "Processing custom scheme link: $uri")
-        }
-        
+        Log.d(TAG, "Processing custom scheme link: $uri")
+
         // Parse the custom scheme link
         context.deepLinkPath = uri.path ?: ""
-        context.additionalData["link_type"] = "custom_scheme"
-        context.additionalData["scheme"] = uri.scheme ?: ""
-        context.additionalData["host"] = uri.host ?: ""
-        
+
         // Extract query parameters
         uri.queryParameterNames.forEach { param ->
             uri.getQueryParameter(param)?.let { value ->
@@ -46,15 +40,8 @@ class SchemeMiddleware(
             }
         }
         
-        // Parse path segments for easier routing
-        uri.pathSegments?.forEachIndexed { index, segment ->
-            context.additionalData["path_segment_$index"] = segment
-        }
-        
-        if (enableLogging) {
-            Log.d(TAG, "Custom scheme link processed - path: ${context.deepLinkPath}, params: ${context.deepLinkParams}")
-        }
-        
+        Log.d(TAG, "Custom scheme link processed - path: ${context.deepLinkPath}, params: ${context.deepLinkParams}")
+
         return next(context)
     }
     

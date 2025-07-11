@@ -9,7 +9,6 @@ import android.util.Log
  */
 class MiddlewareChain(
     private val context: Context,
-    private val enableLogging: Boolean = true
 ) {
     
     companion object {
@@ -24,9 +23,7 @@ class MiddlewareChain(
     fun addMiddleware(middleware: Middleware) {
         middlewares.add(middleware)
         
-        if (enableLogging) {
-            Log.d(TAG, "Added middleware: ${middleware.javaClass.simpleName}")
-        }
+        Log.d(TAG, "Added middleware: ${middleware.javaClass.simpleName}")
     }
     
     /**
@@ -47,9 +44,7 @@ class MiddlewareChain(
      * Process a URI through the middleware chain
      */
     suspend fun processLink(uri: Uri, initialContext: LinkHandlingContext): LinkHandlingResult {
-        if (enableLogging) {
-            Log.d(TAG, "Processing link through middleware chain: $uri")
-        }
+        Log.d(TAG, "Processing link through middleware chain: $uri")
         
         try {
             val finalContext = processMiddlewares(0, initialContext, uri)
@@ -65,9 +60,8 @@ class MiddlewareChain(
             
         } catch (e: Exception) {
             val error = "Error processing link through middleware chain: ${e.message}"
-            if (enableLogging) {
-                Log.e(TAG, error, e)
-            }
+            Log.e(TAG, error, e)
+
             return LinkHandlingResult(
                 handled = false,
                 originalUrl = uri,
@@ -86,10 +80,8 @@ class MiddlewareChain(
         }
         
         val middleware = middlewares[index]
-        if (enableLogging) {
-            Log.d(TAG, "Processing with middleware: ${middleware.javaClass.simpleName}")
-        }
-        
+        Log.d(TAG, "Processing with middleware: ${middleware.javaClass.simpleName}")
+
         return middleware.process(currentContext, uri, context) { nextContext ->
             processMiddlewares(index + 1, nextContext, uri)
         }

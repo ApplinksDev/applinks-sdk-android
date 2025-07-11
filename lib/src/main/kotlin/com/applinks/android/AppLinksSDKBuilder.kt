@@ -20,12 +20,7 @@ class AppLinksSDKBuilder(private val context: Context) {
         config = config.copy(autoHandleLinks = enabled)
         return this
     }
-    
-    fun enableLogging(enabled: Boolean): AppLinksSDKBuilder {
-        config = config.copy(enableLogging = enabled)
-        return this
-    }
-    
+
     fun serverUrl(url: String): AppLinksSDKBuilder {
         config = config.copy(serverUrl = url)
         return this

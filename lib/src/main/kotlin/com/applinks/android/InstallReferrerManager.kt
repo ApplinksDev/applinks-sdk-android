@@ -1,7 +1,6 @@
 package com.applinks.android
 
 import android.content.Context
-import android.net.Uri
 import android.util.Log
 import com.android.installreferrer.api.InstallReferrerClient
 import com.android.installreferrer.api.InstallReferrerStateListener
@@ -9,7 +8,6 @@ import com.android.installreferrer.api.ReferrerDetails
 
 class InstallReferrerManager(
     private val context: Context,
-    private val enableLogging: Boolean = true
 ) {
     
     companion object {

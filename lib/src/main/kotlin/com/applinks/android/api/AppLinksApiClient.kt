@@ -16,7 +16,6 @@ import java.util.concurrent.TimeUnit
 class AppLinksApiClient(
     private val serverUrl: String,
     private val apiKey: String?,
-    private val enableLogging: Boolean = true
 ) {
     companion object {
         private const val TAG = "AppLinksApiClient"
@@ -71,9 +70,7 @@ class AppLinksApiClient(
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string()
                 
-                if (enableLogging) {
-                    Log.d(TAG, "Response code: ${response.code}")
-                }
+                Log.d(TAG, "Response code: ${response.code}")
                 
                 when (response.code) {
                     200 -> {
@@ -82,9 +79,7 @@ class AppLinksApiClient(
                                 val result = json.decodeFromString<T>(it)
                                 Result.Success(result)
                             } catch (e: Exception) {
-                                if (enableLogging) {
-                                    Log.e(TAG, "Failed to parse $resourceType response", e)
-                                }
+                                Log.e(TAG, "Failed to parse $resourceType response", e)
                                 Result.Error("Failed to parse response: ${e.message}")
                             }
                         } ?: Result.Error("Empty response body")
@@ -117,23 +112,17 @@ class AppLinksApiClient(
                 }
             }
         } catch (e: IOException) {
-            if (enableLogging) {
-                Log.e(TAG, "Network error", e)
-            }
+            Log.e(TAG, "Network error", e)
             Result.Error("Network error: ${e.message}")
         } catch (e: Exception) {
-            if (enableLogging) {
-                Log.e(TAG, "Unexpected error", e)
-            }
+            Log.e(TAG, "Unexpected error", e)
             Result.Error("Unexpected error: ${e.message}")
         }
     }
     
     fun retrieveLink(linkUrl: String): Result<LinkResponse> {
-        if (enableLogging) {
-            Log.d(TAG, "Retrieving link with URL: $linkUrl")
-        }
-        
+        Log.d(TAG, "Retrieving link with URL: $linkUrl")
+
         val url = "$serverUrl/api/v1/public/links/retrieve"
         val requestBody = json.encodeToString(RetrieveLinkRequest.serializer(), RetrieveLinkRequest(linkUrl))
         val request = buildPostRequest(url, requestBody)
@@ -142,10 +131,8 @@ class AppLinksApiClient(
     }
     
     fun fetchVisitDetails(visitId: String): Result<VisitDetailsResponse> {
-        if (enableLogging) {
-            Log.d(TAG, "Fetching visit details with ID: $visitId")
-        }
-        
+        Log.d(TAG, "Fetching visit details with ID: $visitId")
+
         val url = "$serverUrl/api/v1/visits/$visitId/details"
         val request = buildRequest(url)
         

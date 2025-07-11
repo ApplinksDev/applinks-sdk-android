@@ -10,14 +10,17 @@ import com.applinks.android.storage.AppLinksPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * AppLinks SDK using the link handling abstraction
  */
 class AppLinksSDK private constructor(
-    private val context: Context, 
     private val config: Config,
-    private val customMiddlewares: List<Middleware> = emptyList()
+    private val customMiddlewares: List<Middleware> = emptyList(),
+    private val preferences: AppLinksPreferences,
+    private val middlewareChain: MiddlewareChain,
+    private val installReferrerManager: InstallReferrerManager
 ) {
     companion object {
         private const val TAG = "AppLinksSDK"
@@ -44,7 +47,15 @@ class AppLinksSDK private constructor(
                 if (instance != null) {
                     Log.w(TAG, "AppLinksSDK already initialized")
                 }
-                instance = AppLinksSDK(context, config, customMiddlewares)
+
+                val appContext = context.applicationContext
+
+                // Create dependencies using application context
+                val preferences = AppLinksPreferences(appContext)
+                val middlewareChain = MiddlewareChain(appContext)
+                val installReferrerManager = InstallReferrerManager(appContext)
+                
+                instance = AppLinksSDK(config, customMiddlewares, preferences, middlewareChain, installReferrerManager)
                 return instance!!
             }
         }
@@ -52,7 +63,6 @@ class AppLinksSDK private constructor(
     
     data class Config(
         val autoHandleLinks: Boolean = true,
-        val enableLogging: Boolean = true,
         val serverUrl: String = "https://applinks.com",
         val apiKey: String? = null,
         val supportedDomains: Set<String> = emptySet(),
@@ -62,13 +72,10 @@ class AppLinksSDK private constructor(
     private val apiClient: AppLinksApiClient = AppLinksApiClient(
         serverUrl = config.serverUrl,
         apiKey = config.apiKey,
-        enableLogging = config.enableLogging
     )
     
-    private val preferences = AppLinksPreferences(context)
-    private val middlewareChain = MiddlewareChain(context, config.enableLogging)
-    private val installReferrerManager = InstallReferrerManager(context, config.enableLogging)
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private val linkListeners = CopyOnWriteArrayList<AppLinksListener>()
     
     init {
         setupMiddlewares()
@@ -77,7 +84,7 @@ class AppLinksSDK private constructor(
     
     private fun setupMiddlewares() {
         // Add logging middleware first
-        middlewareChain.addMiddleware(LoggingMiddleware(config.enableLogging))
+        middlewareChain.addMiddleware(LoggingMiddleware())
         
         // Add Universal Link Middleware if domains are configured
         if (config.supportedDomains.isNotEmpty()) {
@@ -85,7 +92,6 @@ class AppLinksSDK private constructor(
                 UniversalLinkMiddleware(
                     supportedDomains = config.supportedDomains,
                     apiClient = apiClient,
-                    enableLogging = config.enableLogging
                 )
             )
         }
@@ -95,7 +101,6 @@ class AppLinksSDK private constructor(
             middlewareChain.addMiddleware(
                 SchemeMiddleware(
                     supportedSchemes = config.supportedSchemes,
-                    enableLogging = config.enableLogging
                 )
             )
         }
@@ -132,16 +137,11 @@ class AppLinksSDK private constructor(
      */
     private fun checkForDeferredDeepLinkIfFirstLaunch() {
         if (!preferences.isFirstLaunch) {
-            if (config.enableLogging) {
-                Log.d(TAG, "Skipping deferred deep link check - not first launch")
-            }
+            Log.d(TAG, "Skipping deferred deep link check - not first launch")
             return
         }
-        
-        if (config.enableLogging) {
-            Log.d(TAG, "First launch detected - checking for deferred deep link")
-        }
-        
+
+        Log.d(TAG, "First launch detected - checking for deferred deep link")
         checkForDeferredDeepLink()
     }
     
@@ -153,10 +153,8 @@ class AppLinksSDK private constructor(
             installReferrerManager.retrieveInstallReferrer(
                 object : InstallReferrerManager.InstallReferrerCallback {
                     override fun onReferrerRetrieved(referrerData: InstallReferrerManager.ReferrerData) {
-                        if (config.enableLogging) {
-                            Log.d(TAG, "Install referrer retrieved: ${referrerData.installReferrer}")
-                        }
-                        
+                        Log.d(TAG, "Install referrer retrieved: ${referrerData.installReferrer}")
+
                         // Mark first launch as completed
                         preferences.markFirstLaunchCompleted()
                         
@@ -165,10 +163,8 @@ class AppLinksSDK private constructor(
                     }
                     
                     override fun onError(error: String) {
-                        if (config.enableLogging) {
-                            Log.d(TAG, "No install referrer found or error: $error")
-                        }
-                        
+                        Log.d(TAG, "No install referrer found or error: $error")
+
                         // Mark first launch as completed even if no referrer found
                         preferences.markFirstLaunchCompleted()
                     }
@@ -178,10 +174,10 @@ class AppLinksSDK private constructor(
     }
 
     /**
-     * Unified callback interface for all link types
+     * Listener interface for incoming deep links
      */
-    interface LinkCallback {
-        fun onSuccess(link: String, metadata: Map<String, String>)
+    interface AppLinksListener {
+        fun onLinkReceived(link: String, metadata: Map<String, String>)
         fun onError(error: String)
     }
     

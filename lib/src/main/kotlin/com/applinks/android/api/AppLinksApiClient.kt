@@ -1,6 +1,7 @@
 package com.applinks.android.api
 
 import android.util.Log
+import com.applinks.android.AppLinksSDKVersion
 import com.applinks.android.models.ErrorResponse
 import com.applinks.android.models.LinkResponse
 import com.applinks.android.models.RetrieveLinkRequest
@@ -43,6 +44,7 @@ class AppLinksApiClient(
             .url(url)
             .get()
             .addHeader("Accept", "application/json")
+            .addHeader("User-Agent", AppLinksSDKVersion.userAgent)
         
         apiKey?.let {
             requestBuilder.addHeader("Authorization", "Bearer $it")
@@ -57,6 +59,7 @@ class AppLinksApiClient(
             .post(body.toRequestBody("application/json".toMediaType()))
             .addHeader("Accept", "application/json")
             .addHeader("Content-Type", "application/json")
+            .addHeader("User-Agent", AppLinksSDKVersion.userAgent)
         
         apiKey?.let {
             requestBuilder.addHeader("Authorization", "Bearer $it")

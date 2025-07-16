@@ -5,14 +5,14 @@
  * For more details on building Java & JVM projects, please refer to https://docs.gradle.org/8.14.2/userguide/building_java_projects.html in the Gradle documentation.
  * This project uses @Incubating APIs which are subject to change.
  */
+import java.time.LocalDate
 
 plugins {
     id("com.android.library") version "8.11.0"
     id("org.jetbrains.kotlin.android") version "2.1.21"
     kotlin("plugin.serialization") version "2.1.21"
-    id("maven-publish")
+    id("com.vanniktech.maven.publish") version "0.34.0"
     id("signing")
-    id("org.jreleaser") version "1.13.1"
 }
 
 dependencies {
@@ -46,12 +46,19 @@ android {
 
     defaultConfig {
         minSdk = 21
+        buildConfigField("String", "SDK_VERSION", "\"${project.version}\"")
+        buildConfigField("String", "SDK_NAME", "\"AppLinksSDK\"")
+        buildConfigField("String", "BUILD_DATE", "\"${LocalDate.now()}\"")
     }
 
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
         }
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     namespace = "com.applinks.android"
@@ -61,59 +68,41 @@ tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }
 
-// Configure sources and javadoc JARs
-android {
-    publishing {
-        singleVariant("release") {
-            withSourcesJar()
-            withJavadocJar()
+
+mavenPublishing {
+    coordinates("com.applinks", "sdk-android", project.version.toString())
+
+    pom {
+        name.set("AppLinksSDK")
+        description.set("Android SDK for Applinks, a tool for handling deferred deep links and app install attribution using the PlayStore referrer.")
+        inceptionYear.set("2025")
+        url.set("https://github.com/applinksdev/applinks-sdk-android/")
+        licenses {
+            license {
+                name.set("The MIT License")
+                url.set("https://opensource.org/licenses/MIT")
+                distribution.set("repo")
+            }
+        }
+        developers {
+            developer {
+                id.set("ApplinksDev")
+                name.set("Applinks")
+                url.set("https://github.com/ApplinksDev/")
+            }
+        }
+        scm {
+            url.set("https://github.com/ApplinksDev/applinks-sdk-android/")
+            connection.set("scm:git:git://github.com/ApplinksDev/applinks-sdk-android.git")
+            developerConnection.set("scm:git:ssh://git@github.com/ApplinksDev/applinks-sdk-android.git")
         }
     }
+
+    publishToMavenCentral()
+
+    signAllPublications()
 }
 
-// Basic publishing configuration (JReleaser will handle Maven Central)
-//publishing {
-//    publications {
-//        create<MavenPublication>("maven") {
-//            afterEvaluate {
-//                from(components["release"])
-//            }
-//
-//            groupId = "com.applinks"
-//            artifactId = "android-sdk"
-//            version = project.version.toString()
-//
-//            pom {
-//                name.set("AppLinks Android SDK")
-//                description.set("Android SDK for handling deferred deep links, similar to Firebase Dynamic Links")
-//                url.set("https://github.com/ApplinksDev/applinks-sdk-android")
-//
-//                licenses {
-//                    license {
-//                        name.set("MIT License")
-//                        url.set("https://opensource.org/licenses/MIT")
-//                    }
-//                }
-//
-//                developers {
-//                    developer {
-//                        id.set("maxencehenneron")
-//                        name.set("Maxence Henneron")
-//                        email.set("maxence@appsent.com")
-//                    }
-//                }
-//
-//                scm {
-//                    connection.set("scm:git:git://github.com/ApplinksDev/applinks-sdk-android.git")
-//                    developerConnection.set("scm:git:ssh://github.com:ApplinksDev/applinks-sdk-android.git")
-//                    url.set("https://github.com/ApplinksDev/applinks-sdk-android")
-//                }
-//            }
-//        }
-//    }
-//}
-
-// JReleaser handles signing automatically
 signing {
-    setRequired(false)
+    useGpgCmd()
 }

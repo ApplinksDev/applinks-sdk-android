@@ -40,6 +40,9 @@ class SchemeMiddleware(
             }
         }
         
+        // For scheme middleware, schemeUrl is same as originalUrl
+        context.schemeUrl = uri
+        
         Log.d(TAG, "Custom scheme link processed - path: ${context.deepLinkPath}, params: ${context.deepLinkParams}")
 
         return next(context)

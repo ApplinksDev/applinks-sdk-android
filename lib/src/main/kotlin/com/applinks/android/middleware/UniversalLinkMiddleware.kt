@@ -14,6 +14,7 @@ import com.applinks.android.handlers.Middleware
 class UniversalLinkMiddleware(
     private val supportedDomains: Set<String>,
     private val apiClient: AppLinksApiClient,
+    private val supportedSchemes: Set<String> = emptySet()
 ) : Middleware {
     
     companion object {
@@ -49,6 +50,9 @@ class UniversalLinkMiddleware(
                     context.additionalData["visit_id"] = visitId
                 }
                 
+                // Construct schemeUrl using first available supported scheme
+                context.schemeUrl = buildSchemeUrl(context)
+                
                 Log.d(TAG, "Universal link processed - path: ${context.deepLinkPath}, params: ${context.deepLinkParams}")
             }
             
@@ -68,5 +72,36 @@ class UniversalLinkMiddleware(
                 uri.host == domain
             }
         }
+    }
+    
+    private fun buildSchemeUrl(context: LinkHandlingContext): Uri? {
+        if (supportedSchemes.isEmpty() || context.deepLinkPath == null) {
+            return null
+        }
+        
+        val firstScheme = supportedSchemes.first()
+        val path = context.deepLinkPath ?: ""
+        
+        // Extract the first path segment as the authority/host for custom schemes
+        // e.g., "/product/shoes-123" -> authority="product", path="/shoes-123"
+        val pathSegments = path.split("/").filter { it.isNotEmpty() }
+        val authority = pathSegments.firstOrNull() ?: ""
+        val remainingPath = if (pathSegments.size > 1) {
+            "/" + pathSegments.drop(1).joinToString("/")
+        } else {
+            ""
+        }
+        
+        val uriBuilder = Uri.Builder()
+            .scheme(firstScheme)
+            .authority(authority)
+            .path(remainingPath)
+            
+        // Add query parameters
+        context.deepLinkParams.forEach { (key, value) ->
+            uriBuilder.appendQueryParameter(key, value)
+        }
+        
+        return uriBuilder.build()
     }
 }

@@ -53,6 +53,7 @@ class MiddlewareChain(
             return LinkHandlingResult(
                 handled = true,
                 originalUrl = uri,
+                schemeUrl = finalContext.schemeUrl ?: uri,
                 path = finalContext.deepLinkPath ?: "",
                 params = finalContext.deepLinkParams,
                 metadata = finalContext.additionalData
@@ -65,6 +66,7 @@ class MiddlewareChain(
             return LinkHandlingResult(
                 handled = false,
                 originalUrl = uri,
+                schemeUrl = uri,
                 path = "",
                 error = error
             )

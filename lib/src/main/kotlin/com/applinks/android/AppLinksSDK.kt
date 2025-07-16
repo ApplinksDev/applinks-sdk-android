@@ -10,6 +10,7 @@ import com.applinks.android.storage.AppLinksPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -92,6 +93,7 @@ class AppLinksSDK private constructor(
                 UniversalLinkMiddleware(
                     supportedDomains = config.supportedDomains,
                     apiClient = apiClient,
+                    supportedSchemes = config.supportedSchemes
                 )
             )
         }
@@ -114,7 +116,7 @@ class AppLinksSDK private constructor(
     /**
      * Process any type of link - universal or custom scheme
      */
-    fun handleLink(uri: Uri, callback: LinkCallback) {
+    fun handleLink(uri: Uri) {
         coroutineScope.launch {
             val context = LinkHandlingContext(
                 isFirstLaunch = preferences.isFirstLaunch
@@ -123,11 +125,9 @@ class AppLinksSDK private constructor(
             val result = middlewareChain.processLink(uri, context)
             
             if (result.error != null) {
-                callback.onError(result.error)
+                notifyListenersError(result.error)
             } else {
-                // Convert metadata to String map for backward compatibility
-                val stringMetadata = result.metadata.mapValues { it.value.toString() }
-                callback.onSuccess(uri.toString(), stringMetadata)
+                notifyListenersLinkReceived(result)
             }
         }
     }
@@ -158,7 +158,8 @@ class AppLinksSDK private constructor(
                         // Mark first launch as completed
                         preferences.markFirstLaunchCompleted()
                         
-                        // Process the referrer data
+                        // Process the referrer data for deep links
+                        processReferrerForDeepLink(referrerData.installReferrer)
                         
                     }
                     
@@ -172,13 +173,79 @@ class AppLinksSDK private constructor(
             )
         }
     }
+    
+    private fun processReferrerForDeepLink(referrerString: String) {
+        coroutineScope.launch {
+            try {
+                Log.d(TAG, "Processing referrer for deep link: $referrerString")
+                
+                // Parse the URL-encoded referrer string as a URI
+                val referrerUri = Uri.parse(referrerString)
+                
+                val context = LinkHandlingContext(
+                    isFirstLaunch = preferences.isFirstLaunch
+                )
+                
+                val result = middlewareChain.processLink(referrerUri, context)
+                
+                if (result.error != null) {
+                    notifyListenersError(result.error)
+                } else {
+                    notifyListenersLinkReceived(result)
+                    Log.d(TAG, "Deferred deep link processed: ${result.path}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing referrer for deep link", e)
+                notifyListenersError("Error processing deferred deep link: ${e.message}")
+            }
+        }
+    }
+    
 
     /**
      * Listener interface for incoming deep links
      */
     interface AppLinksListener {
-        fun onLinkReceived(link: String, metadata: Map<String, String>)
+        fun onLinkReceived(result: LinkHandlingResult)
         fun onError(error: String)
+    }
+    
+    /**
+     * Add a listener for incoming deep links
+     */
+    fun addLinkListener(listener: AppLinksListener) {
+        linkListeners.add(listener)
+    }
+    
+    /**
+     * Remove a listener for incoming deep links
+     */
+    fun removeLinkListener(listener: AppLinksListener) {
+        linkListeners.remove(listener)
+    }
+    
+    private suspend fun notifyListenersLinkReceived(result: LinkHandlingResult) {
+        withContext(Dispatchers.Main) {
+            linkListeners.forEach { listener ->
+                try {
+                    listener.onLinkReceived(result)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error notifying listener", e)
+                }
+            }
+        }
+    }
+    
+    private suspend fun notifyListenersError(error: String) {
+        withContext(Dispatchers.Main) {
+            linkListeners.forEach { listener ->
+                try {
+                    listener.onError(error)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error notifying listener", e)
+                }
+            }
+        }
     }
     
     /**
@@ -188,11 +255,4 @@ class AppLinksSDK private constructor(
         middlewareChain.addMiddleware(middleware)
     }
     
-    /**
-     * Legacy interface for backward compatibility
-     */
-    interface DeferredDeepLinkCallback {
-        fun onDeepLinkReceived(deepLink: String, metadata: Map<String, String>, handled: Boolean)
-        fun onError(error: String)
-    }
 }

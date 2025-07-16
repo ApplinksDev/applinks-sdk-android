@@ -10,6 +10,7 @@ import java.util.Date
 data class LinkHandlingResult(
     val handled: Boolean,
     val originalUrl: Uri,
+    val schemeUrl: Uri,
     val path: String,
     val params: Map<String, String> = emptyMap(),
     val metadata: Map<String, Any> = emptyMap(),
@@ -24,7 +25,8 @@ data class LinkHandlingContext(
     val launchTimestamp: Date = Date(),
     var deepLinkPath: String? = null,
     var deepLinkParams: MutableMap<String, String> = mutableMapOf(),
-    var additionalData: MutableMap<String, Any> = mutableMapOf()
+    var additionalData: MutableMap<String, Any> = mutableMapOf(),
+    var schemeUrl: Uri? = null
 )
 
 /**

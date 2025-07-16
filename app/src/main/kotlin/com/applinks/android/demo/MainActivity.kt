@@ -5,13 +5,15 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.os.bundleOf
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.setupActionBarWithNavController
 import com.applinks.android.AppLinksSDK
+import com.applinks.android.handlers.LinkHandlingResult
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), AppLinksSDK.AppLinksListener {
     
     private lateinit var navController: NavController
     
@@ -28,15 +30,16 @@ class MainActivity : AppCompatActivity() {
         val appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
         
-        // Navigation handler removed - using middleware pattern now
+        // Setup AppLinks listener
+        AppLinksSDK.getInstance().addLinkListener(this)
         
         // Handle intent if activity was launched with a deep link
         handleIntent(intent)
     }
     
-    override fun onNewIntent(intent: Intent) {
+    override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        handleIntent(intent)
+        intent?.let { handleIntent(it) }
     }
     
     override fun onSupportNavigateUp(): Boolean {
@@ -47,30 +50,60 @@ class MainActivity : AppCompatActivity() {
     private fun handleIntent(intent: Intent) {
         intent.data?.let { uri ->
             Log.d("MainActivity", "Handling intent with URI: $uri")
-            
-            AppLinksSDK.getInstance().handleLink(uri, object : AppLinksSDK.LinkCallback {
-                override fun onSuccess(link: String, metadata: Map<String, String>) {
-                    Log.d("MainActivity", "Successfully handled link: $link")
-                    metadata.forEach { (key, value) ->
-                        Log.d("MainActivity", "  $key: $value")
-                    }
-                }
-                
-                override fun onError(error: String) {
-                    Log.e("MainActivity", "Failed to handle link: $error")
-                    // Navigation Component couldn't handle it, try manual handling
-                    handleLinkManually(uri)
-                }
-            })
+            AppLinksSDK.getInstance().handleLink(uri)
         }
     }
     
-    private fun handleLinkManually(uri: Uri) {
-        // Fallback for links not defined in navigation graph
-        Log.d("MainActivity", "Handling link manually: $uri")
+    override fun onLinkReceived(result: LinkHandlingResult) {
+        Log.d("MainActivity", "Link received: ${result.originalUrl}")
+        Log.d("MainActivity", "  Handled: ${result.handled}")
+        Log.d("MainActivity", "  Path: ${result.path}")
+        Log.d("MainActivity", "  SchemeUrl: ${result.schemeUrl}")
         
+        result.params.forEach { (key, value) ->
+            Log.d("MainActivity", "  Param $key: $value")
+        }
+        
+        result.metadata.forEach { (key, value) ->
+            Log.d("MainActivity", "  Metadata $key: $value")
+        }
+        
+        // Handle the deep link - navigate based on the result
+        handleLinkNavigation(result)
+    }
+    
+    override fun onError(error: String) {
+        Log.e("MainActivity", "AppLinks error: $error")
         // Navigate to home as fallback
         navController.navigate(R.id.homeFragment)
+    }
+    
+    private fun handleLinkNavigation(result: LinkHandlingResult) {
+        try {
+            val internalUri = result.schemeUrl
+            Log.d("MainActivity", "Navigating with URI: $internalUri")
+
+            try {
+                // Let Android Navigation Component handle the navigation automatically
+                navController.navigate(internalUri)
+                Log.d("MainActivity", "Successfully navigated to: $internalUri")
+            } catch (e: IllegalArgumentException) {
+                Log.e("MainActivity", "Invalid deep link URI: $internalUri", e)
+                navController.navigate(R.id.homeFragment)
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Navigation error for URI: $internalUri", e)
+                navController.navigate(R.id.homeFragment)
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error handling deep link navigation", e)
+            // Fallback to home on any navigation error
+            navController.navigate(R.id.homeFragment)
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        AppLinksSDK.getInstance().removeLinkListener(this)
     }
     
 }

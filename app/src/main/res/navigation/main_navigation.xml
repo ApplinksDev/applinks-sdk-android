@@ -34,20 +34,10 @@
             android:name="productName"
             app:argType="string"
             android:defaultValue="Unknown Product" />
-        
-        <!-- Universal links -->
-        <deepLink
-            android:id="@+id/deepLinkProduct"
-            app:uri="https://example.com/product/{productId}" />
-            
+
         <deepLink
             android:id="@+id/deepLinkProductWithName"
-            app:uri="https://example.com/p/{productId}/{productName}" />
-            
-        <!-- Custom scheme links -->
-        <deepLink
-            android:id="@+id/deepLinkProductScheme"
-            app:uri="applinks://product/{productId}" />
+            app:uri="applinks://product/{productId}?productName={productName}" />
     </fragment>
     
     <fragment
@@ -66,14 +56,14 @@
             app:argType="integer"
             android:defaultValue="10" />
         
-        <!-- Deep links for promotions -->
+        <!-- Internal navigation scheme -->
         <deepLink
             android:id="@+id/deepLinkPromo"
-            app:uri="https://example.com/promo?code={promoCode}&amp;discount={discount}" />
+            app:uri="applinks://promo/{promoCode}" />
             
         <deepLink
-            android:id="@+id/deepLinkPromoScheme"
-            app:uri="applinks://promo/{promoCode}" />
+            android:id="@+id/deepLinkPromoWithDiscount"
+            app:uri="applinks://promo/{promoCode}?discount={discount}" />
     </fragment>
 
 </navigation>

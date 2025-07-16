@@ -1,0 +1,72 @@
+project:
+  name: applinks-android-sdk
+  description: Android SDK for handling deferred deep links, similar to Firebase Dynamic Links
+  longDescription: |
+    AppLinks Android SDK provides a simple way to handle deferred deep links in Android applications.
+    It uses the Play Install Referrer API to attribute app installs and retrieve deferred deep links,
+    similar to the now-deprecated Firebase Dynamic Links.
+  website: https://github.com/ApplinksDev/applinks-sdk-android
+  authors:
+    - Maxence Henneron
+  license: MIT
+  inceptionYear: 2025
+  stereotype: library
+  vendor: AppLinks
+
+release:
+  github:
+    owner: ApplinksDev
+    name: applinks-sdk-android
+    tagName: '{{projectVersion}}'
+    releaseName: '{{projectVersion}}'
+    branch: main
+    changelog:
+      external: .github/release-notes.md
+
+signing:
+  active: ALWAYS
+  armored: true
+
+deploy:
+  maven:
+    mavenCentral:
+      sonatype:
+        active: ALWAYS
+        url: https://central.sonatype.com/api/v1/publisher
+        stagingRepository: build/staging-deploy
+        applyMavenCentralRules: true
+        username: '{{Env.JRELEASER_MAVENCENTRAL_USERNAME}}'
+        password: '{{Env.JRELEASER_MAVENCENTRAL_TOKEN}}'
+
+distributions:
+  applinks-android-sdk:
+    type: SINGLE_JAR
+    stereotype: library
+    artifacts:
+      - path: lib/build/outputs/aar/lib-release.aar
+        transform: lib/build/libs/{{distributionName}}-{{projectVersion}}.jar
+
+announce:
+  active: RELEASE
+  github:
+    active: ALWAYS
+
+environment:
+  properties:
+    # Signing
+    JRELEASER_GPG_PASSPHRASE:
+      description: GPG signing passphrase
+    JRELEASER_GPG_SECRET_KEY:
+      description: GPG secret key
+    JRELEASER_GPG_PUBLIC_KEY:
+      description: GPG public key
+    
+    # GitHub
+    JRELEASER_GITHUB_TOKEN:
+      description: GitHub token for releases
+    
+    # Maven Central
+    JRELEASER_MAVENCENTRAL_USERNAME:
+      description: Maven Central username
+    JRELEASER_MAVENCENTRAL_TOKEN:
+      description: Maven Central token

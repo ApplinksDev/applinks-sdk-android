@@ -77,6 +77,8 @@ class AppLinksSDK private constructor(
     
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private val linkListeners = CopyOnWriteArrayList<AppLinksListener>()
+    private val pendingResults = mutableListOf<LinkHandlingResult>()
+    private val pendingErrors = mutableListOf<String>()
     
     init {
         setupMiddlewares()
@@ -215,6 +217,43 @@ class AppLinksSDK private constructor(
      */
     fun addLinkListener(listener: AppLinksListener) {
         linkListeners.add(listener)
+        
+        // Process any queued results when the first listener is added
+        if (linkListeners.size == 1) {
+            coroutineScope.launch {
+                withContext(Dispatchers.Main) {
+                    // Process queued link results
+                    synchronized(pendingResults) {
+                        if (pendingResults.isNotEmpty()) {
+                            Log.d(TAG, "Processing ${pendingResults.size} queued link results")
+                            pendingResults.forEach { result ->
+                                try {
+                                    listener.onLinkReceived(result)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error delivering queued link result", e)
+                                }
+                            }
+                            pendingResults.clear()
+                        }
+                    }
+                    
+                    // Process queued errors
+                    synchronized(pendingErrors) {
+                        if (pendingErrors.isNotEmpty()) {
+                            Log.d(TAG, "Processing ${pendingErrors.size} queued errors")
+                            pendingErrors.forEach { error ->
+                                try {
+                                    listener.onError(error)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error delivering queued error", e)
+                                }
+                            }
+                            pendingErrors.clear()
+                        }
+                    }
+                }
+            }
+        }
     }
     
     /**
@@ -226,11 +265,18 @@ class AppLinksSDK private constructor(
     
     private suspend fun notifyListenersLinkReceived(result: LinkHandlingResult) {
         withContext(Dispatchers.Main) {
-            linkListeners.forEach { listener ->
-                try {
-                    listener.onLinkReceived(result)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error notifying listener", e)
+            if (linkListeners.isEmpty()) {
+                synchronized(pendingResults) {
+                    pendingResults.add(result)
+                    Log.d(TAG, "No listeners available, queued link result for later delivery")
+                }
+            } else {
+                linkListeners.forEach { listener ->
+                    try {
+                        listener.onLinkReceived(result)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error notifying listener", e)
+                    }
                 }
             }
         }
@@ -238,11 +284,18 @@ class AppLinksSDK private constructor(
     
     private suspend fun notifyListenersError(error: String) {
         withContext(Dispatchers.Main) {
-            linkListeners.forEach { listener ->
-                try {
-                    listener.onError(error)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error notifying listener", e)
+            if (linkListeners.isEmpty()) {
+                synchronized(pendingErrors) {
+                    pendingErrors.add(error)
+                    Log.d(TAG, "No listeners available, queued error for later delivery")
+                }
+            } else {
+                linkListeners.forEach { listener ->
+                    try {
+                        listener.onError(error)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error notifying listener", e)
+                    }
                 }
             }
         }

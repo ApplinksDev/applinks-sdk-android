@@ -64,3 +64,61 @@ data class VisitDetailsResponse(
     val browserFingerprint: kotlinx.serialization.json.JsonElement? = null,
     val link: LinkResponse? = null
 )
+
+@Serializable
+data class CreateLinkRequest(
+    val domain: String,
+    val link: LinkData
+)
+
+@Serializable
+data class LinkData(
+    val title: String,
+    @SerialName("original_url")
+    val originalUrl: String? = null,
+    @SerialName("deep_link_path")
+    val deepLinkPath: String? = null,
+    @SerialName("deep_link_params")
+    val deepLinkParams: Map<String, String>? = null,
+    @SerialName("expires_at")
+    val expiresAt: String? = null,
+    @SerialName("alias_path_attributes")
+    val aliasPathAttributes: AliasPathAttributes? = null
+)
+
+@Serializable
+data class AliasPathAttributes(
+    val type: String
+)
+
+@Serializable
+data class CreateLinkResponse(
+    val id: String,
+    val title: String,
+    @SerialName("alias_path")
+    val aliasPath: String,
+    val domain: String,
+    @SerialName("original_url")
+    val originalUrl: String? = null,
+    @SerialName("deep_link_path")
+    val deepLinkPath: String? = null,
+    @SerialName("deep_link_params")
+    val deepLinkParams: Map<String, String>? = null,
+    @SerialName("expires_at")
+    val expiresAt: String? = null,
+    @SerialName("created_at")
+    val createdAt: String,
+    @SerialName("updated_at")
+    val updatedAt: String,
+    @SerialName("full_url")
+    val fullUrl: String,
+    @SerialName("visit_id")
+    val visitId: String? = null,
+    val project: ProjectInfo? = null
+)
+
+@Serializable
+data class ProjectInfo(
+    val id: String,
+    val name: String
+)

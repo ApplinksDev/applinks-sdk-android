@@ -46,5 +46,43 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Check for Deferred Deep Link" />
+    
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="?android:attr/listDivider"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="16dp" />
+    
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Create Dynamic Links:"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/createProductLinkButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Create Product Link"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/createPromoLinkButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Create Promo Link (Short)"
+        android:layout_marginBottom="8dp" />
+    
+    <TextView
+        android:id="@+id/createdLinkTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textIsSelectable="true"
+        android:background="#f0f0f0"
+        android:padding="8dp"
+        android:visibility="gone" />
 
 </LinearLayout>

@@ -1,14 +1,17 @@
 package com.applinks.android.demo
 
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.applinks.android.AppLinksSDK
+import com.applinks.android.PathType
 
 class HomeFragment : Fragment() {
     
@@ -20,6 +23,8 @@ class HomeFragment : Fragment() {
         return inflater.inflate(R.layout.fragment_home, container, false)
     }
     
+    private lateinit var createdLinkTextView: TextView
+    
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
@@ -27,6 +32,9 @@ class HomeFragment : Fragment() {
         val productButton = view.findViewById<Button>(R.id.productButton)
         val promoButton = view.findViewById<Button>(R.id.promoButton)
         val checkDeferredButton = view.findViewById<Button>(R.id.checkDeferredButton)
+        val createProductLinkButton = view.findViewById<Button>(R.id.createProductLinkButton)
+        val createPromoLinkButton = view.findViewById<Button>(R.id.createPromoLinkButton)
+        createdLinkTextView = view.findViewById<TextView>(R.id.createdLinkTextView)
         
         // Navigate to product
         productButton.setOnClickListener {
@@ -51,9 +59,67 @@ class HomeFragment : Fragment() {
             statusTextView.text = "Checking for deferred deep link..."
         }
         
+        // Create product link
+        createProductLinkButton.setOnClickListener {
+            createProductLink()
+        }
+        
+        // Create promo link
+        createPromoLinkButton.setOnClickListener {
+            createPromoLink()
+        }
+        
         // Show initial status
         statusTextView.text = "Welcome to AppLinks Demo!\n\nTry the buttons below or use these deep links:\n\n" +
                 "• https://example.com/product/456\n" +
                 "• applinks://promo/SPECIAL50\n"
+    }
+    
+    private fun createProductLink() {
+        AppLinksSDK.getInstance().linkShortener.shortLinkAsync {
+            web_link = Uri.parse("https://example.com/product/456")
+            domain = "example.onapp.link"
+            title = "Demo Product - Special Edition"
+            deepLinkPath = "/product/456"
+            deepLinkParams = mapOf(
+                "productId" to "456",
+                "source" to "app_share",
+                "campaign" to "product_demo"
+            )
+            pathType = PathType.UNGUESSABLE
+        }.addOnSuccessListener { (shortLink, previewLink) ->
+            createdLinkTextView.visibility = View.VISIBLE
+            createdLinkTextView.text = "✅ Product link created:\n$shortLink\n\nPreview: $previewLink"
+            Toast.makeText(context, "Product link created!", Toast.LENGTH_SHORT).show()
+        }.addOnFailureListener { exception ->
+            createdLinkTextView.visibility = View.VISIBLE
+            createdLinkTextView.text = "❌ Error creating product link:\n${exception.message}"
+            Toast.makeText(context, "Failed: ${exception.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+    
+    private fun createPromoLink() {
+        AppLinksSDK.getInstance().linkShortener.shortLinkAsync {
+            web_link = Uri.parse("https://example.com/promo/SPECIAL50")
+            domain = "example.onapp.link"
+            title = "Special Promotion - 50% Off"
+            deepLinkPath = "/promo/SPECIAL50"
+            deepLinkParams = mapOf(
+                "promoCode" to "SPECIAL50",
+                "discount" to "50",
+                "source" to "app_share",
+                "campaign" to "summer_promo"
+            )
+            pathType = PathType.SHORT
+        }.addOnSuccessListener { result ->
+            val (shortLink, previewLink) = result
+            createdLinkTextView.visibility = View.VISIBLE
+            createdLinkTextView.text = "✅ Promo link created:\n$shortLink\n\nPreview: $previewLink"
+            Toast.makeText(context, "Promo link created!", Toast.LENGTH_SHORT).show()
+        }.addOnFailureListener { exception ->
+            createdLinkTextView.visibility = View.VISIBLE
+            createdLinkTextView.text = "❌ Error creating promo link:\n${exception.message}"
+            Toast.makeText(context, "Failed: ${exception.message}", Toast.LENGTH_LONG).show()
+        }
     }
 }

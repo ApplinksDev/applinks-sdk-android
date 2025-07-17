@@ -2,6 +2,8 @@ package com.applinks.android.api
 
 import android.util.Log
 import com.applinks.android.AppLinksSDKVersion
+import com.applinks.android.models.CreateLinkRequest
+import com.applinks.android.models.CreateLinkResponse
 import com.applinks.android.models.ErrorResponse
 import com.applinks.android.models.LinkResponse
 import com.applinks.android.models.RetrieveLinkRequest
@@ -76,7 +78,7 @@ class AppLinksApiClient(
                 Log.d(TAG, "Response code: ${response.code}")
                 
                 when (response.code) {
-                    200 -> {
+                    200, 201 -> {
                         body?.let {
                             try {
                                 val result = json.decodeFromString<T>(it)
@@ -140,5 +142,15 @@ class AppLinksApiClient(
         val request = buildRequest(url)
         
         return executeRequest<VisitDetailsResponse>(request, "visit")
+    }
+    
+    fun createLink(createLinkRequest: CreateLinkRequest): Result<CreateLinkResponse> {
+        Log.d(TAG, "Creating link with title: ${createLinkRequest.link.title}")
+
+        val url = "$serverUrl/api/v1/public/links"
+        val requestBody = json.encodeToString(CreateLinkRequest.serializer(), createLinkRequest)
+        val request = buildPostRequest(url, requestBody)
+        
+        return executeRequest<CreateLinkResponse>(request, "link")
     }
 }

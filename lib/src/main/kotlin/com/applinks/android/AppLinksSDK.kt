@@ -76,6 +76,11 @@ class AppLinksSDK private constructor(
     )
     
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    
+    /**
+     * API for creating short links
+     */
+    val linkShortener: LinkShortener = LinkShortener(apiClient, coroutineScope)
     private val linkListeners = CopyOnWriteArrayList<AppLinksListener>()
     private val pendingResults = mutableListOf<LinkHandlingResult>()
     private val pendingErrors = mutableListOf<String>()
@@ -212,6 +217,7 @@ class AppLinksSDK private constructor(
         fun onError(error: String)
     }
     
+    
     /**
      * Add a listener for incoming deep links
      */
@@ -307,5 +313,6 @@ class AppLinksSDK private constructor(
     fun addCustomMiddleware(middleware: Middleware) {
         middlewareChain.addMiddleware(middleware)
     }
+    
     
 }

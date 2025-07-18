@@ -45,11 +45,6 @@ class UniversalLinkMiddleware(
                 context.deepLinkPath = linkResponse.deepLinkPath
                 context.deepLinkParams.putAll(linkResponse.deepLinkParams)
                 
-                // Add visit tracking if available
-                linkResponse.visitId?.let { visitId ->
-                    context.additionalData["visit_id"] = visitId
-                }
-                
                 // Construct schemeUrl using first available supported scheme
                 context.schemeUrl = buildSchemeUrl(context)
                 

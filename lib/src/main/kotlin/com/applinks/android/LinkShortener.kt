@@ -4,12 +4,14 @@ import android.net.Uri
 import com.applinks.android.api.AppLinksApiClient
 import com.applinks.android.models.AliasPathAttributes
 import com.applinks.android.models.CreateLinkRequest
-import com.applinks.android.models.CreateLinkResponse
 import com.applinks.android.models.LinkData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.core.net.toUri
+import java.time.Instant
+import java.time.format.DateTimeFormatter
 
 /**
  * Enum for link path types
@@ -34,7 +36,7 @@ class LinkShortener internal constructor(
     /**
      * API for creating short links
      */
-    fun shortLinkAsync(builder: ShortLinkBuilder.() -> Unit): Task<ShortLinkResult> {
+    fun createShortLinkAsync(builder: ShortLinkBuilder.() -> Unit): Task<ShortLinkResult> {
         val linkBuilder = ShortLinkBuilder().apply(builder)
         return Task(apiClient, coroutineScope, linkBuilder)
     }
@@ -49,7 +51,7 @@ class ShortLinkBuilder {
     var title: String? = null
     var deepLinkPath: String? = null
     var deepLinkParams: Map<String, String>? = null
-    var expiresAt: String? = null
+    var expiresAt: Instant? = null
     var pathType: PathType = PathType.UNGUESSABLE
     
     internal fun build(): CreateLinkRequest {
@@ -105,8 +107,7 @@ class Task<T> internal constructor(
                     when (result) {
                         is AppLinksApiClient.Result.Success -> {
                             val shortLinkResult = ShortLinkResult(
-                                shortLink = Uri.parse(result.data.fullUrl),
-                                previewLink = Uri.parse(result.data.fullUrl) // Using same URL for preview
+                                shortLink = result.data.fullUrl.toUri(),
                             )
                             successListener?.invoke(shortLinkResult as T)
                         }
@@ -129,6 +130,5 @@ class Task<T> internal constructor(
  */
 data class ShortLinkResult(
     val shortLink: Uri,
-    val previewLink: Uri
 )
 

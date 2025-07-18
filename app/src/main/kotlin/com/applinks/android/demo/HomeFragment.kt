@@ -12,6 +12,9 @@ import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.applinks.android.AppLinksSDK
 import com.applinks.android.PathType
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAmount
 
 class HomeFragment : Fragment() {
     
@@ -76,7 +79,7 @@ class HomeFragment : Fragment() {
     }
     
     private fun createProductLink() {
-        AppLinksSDK.getInstance().linkShortener.shortLinkAsync {
+        AppLinksSDK.getInstance().linkShortener.createShortLinkAsync {
             web_link = Uri.parse("https://example.com/product/456")
             domain = "example.onapp.link"
             title = "Demo Product - Special Edition"
@@ -87,9 +90,10 @@ class HomeFragment : Fragment() {
                 "campaign" to "product_demo"
             )
             pathType = PathType.UNGUESSABLE
-        }.addOnSuccessListener { (shortLink, previewLink) ->
+            expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES)
+        }.addOnSuccessListener { (shortLink) ->
             createdLinkTextView.visibility = View.VISIBLE
-            createdLinkTextView.text = "✅ Product link created:\n$shortLink\n\nPreview: $previewLink"
+            createdLinkTextView.text = "✅ Product link created:\n$shortLink"
             Toast.makeText(context, "Product link created!", Toast.LENGTH_SHORT).show()
         }.addOnFailureListener { exception ->
             createdLinkTextView.visibility = View.VISIBLE
@@ -99,7 +103,7 @@ class HomeFragment : Fragment() {
     }
     
     private fun createPromoLink() {
-        AppLinksSDK.getInstance().linkShortener.shortLinkAsync {
+        AppLinksSDK.getInstance().linkShortener.createShortLinkAsync {
             web_link = Uri.parse("https://example.com/promo/SPECIAL50")
             domain = "example.onapp.link"
             title = "Special Promotion - 50% Off"
@@ -111,10 +115,11 @@ class HomeFragment : Fragment() {
                 "campaign" to "summer_promo"
             )
             pathType = PathType.SHORT
+            expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES)
         }.addOnSuccessListener { result ->
-            val (shortLink, previewLink) = result
+            val (shortLink) = result
             createdLinkTextView.visibility = View.VISIBLE
-            createdLinkTextView.text = "✅ Promo link created:\n$shortLink\n\nPreview: $previewLink"
+            createdLinkTextView.text = "✅ Promo link created:\n$shortLink"
             Toast.makeText(context, "Promo link created!", Toast.LENGTH_SHORT).show()
         }.addOnFailureListener { exception ->
             createdLinkTextView.visibility = View.VISIBLE

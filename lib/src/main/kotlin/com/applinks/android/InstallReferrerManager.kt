@@ -36,7 +36,6 @@ class InstallReferrerManager(
     
     fun retrieveInstallReferrer(callback: InstallReferrerCallback) {
         referrerClient = InstallReferrerClient.newBuilder(context).build()
-        
         referrerClient?.startConnection(object : InstallReferrerStateListener {
             override fun onInstallReferrerSetupFinished(responseCode: Int) {
                 when (responseCode) {

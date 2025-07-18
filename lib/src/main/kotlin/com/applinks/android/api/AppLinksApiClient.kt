@@ -3,11 +3,9 @@ package com.applinks.android.api
 import android.util.Log
 import com.applinks.android.AppLinksSDKVersion
 import com.applinks.android.models.CreateLinkRequest
-import com.applinks.android.models.CreateLinkResponse
 import com.applinks.android.models.ErrorResponse
 import com.applinks.android.models.LinkResponse
 import com.applinks.android.models.RetrieveLinkRequest
-import com.applinks.android.models.VisitDetailsResponse
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -128,29 +126,20 @@ class AppLinksApiClient(
     fun retrieveLink(linkUrl: String): Result<LinkResponse> {
         Log.d(TAG, "Retrieving link with URL: $linkUrl")
 
-        val url = "$serverUrl/api/v1/public/links/retrieve"
+        val url = "$serverUrl/api/v1/links/retrieve"
         val requestBody = json.encodeToString(RetrieveLinkRequest.serializer(), RetrieveLinkRequest(linkUrl))
         val request = buildPostRequest(url, requestBody)
         
         return executeRequest<LinkResponse>(request, "link")
     }
     
-    fun fetchVisitDetails(visitId: String): Result<VisitDetailsResponse> {
-        Log.d(TAG, "Fetching visit details with ID: $visitId")
-
-        val url = "$serverUrl/api/v1/visits/$visitId/details"
-        val request = buildRequest(url)
-        
-        return executeRequest<VisitDetailsResponse>(request, "visit")
-    }
-    
-    fun createLink(createLinkRequest: CreateLinkRequest): Result<CreateLinkResponse> {
+    fun createLink(createLinkRequest: CreateLinkRequest): Result<LinkResponse> {
         Log.d(TAG, "Creating link with title: ${createLinkRequest.link.title}")
 
-        val url = "$serverUrl/api/v1/public/links"
+        val url = "$serverUrl/api/v1/links"
         val requestBody = json.encodeToString(CreateLinkRequest.serializer(), createLinkRequest)
         val request = buildPostRequest(url, requestBody)
         
-        return executeRequest<CreateLinkResponse>(request, "link")
+        return executeRequest<LinkResponse>(request, "link")
     }
 }

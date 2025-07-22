@@ -10,12 +10,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.core.net.toUri
-import java.time.Instant
 
 /**
  * Enum for link path types
  */
-enum class PathType(val value: String) {
+enum class LinkType(val value: String) {
     /**
      * Generates a 32-character random path for security-sensitive links
      */
@@ -50,24 +49,25 @@ class ShortLinkBuilder {
     var title: String? = null
     var deepLinkPath: String? = null
     var deepLinkParams: Map<String, String>? = null
-    var expiresAt: Instant? = null
-    var pathType: PathType = PathType.UNGUESSABLE
+    var expiresAt: Long? = null
+    var linkType: LinkType = LinkType.UNGUESSABLE
     
     internal fun build(): CreateLinkRequest {
-        requireNotNull(webLink) { "web_link must be set" }
-        requireNotNull(domain) { "domain must be set" }
+        val validDomain = domain ?: throw IllegalArgumentException("domain must be set")
+        val validTitle = title ?: throw IllegalArgumentException("title must be set") 
+        val validDeepLinkPath = deepLinkPath ?: throw IllegalArgumentException("deepLinkPath must be set")
         
         val linkData = LinkData(
-            title = title ?: "AppLinks Link",
-            originalUrl = webLink.toString(),
-            deepLinkPath = deepLinkPath,
+            title = validTitle,
+            originalUrl = webLink?.toString(),
+            deepLinkPath = validDeepLinkPath,
             deepLinkParams = deepLinkParams,
             expiresAt = expiresAt,
-            aliasPathAttributes = AliasPathAttributes(type = pathType.value)
+            aliasPathAttributes = AliasPathAttributes(type = linkType.value)
         )
         
         return CreateLinkRequest(
-            domain = domain!!,
+            domain = validDomain,
             link = linkData
         )
     }

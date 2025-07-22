@@ -11,7 +11,7 @@ import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.applinks.android.AppLinksSDK
-import com.applinks.android.PathType
+import com.applinks.android.LinkType
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -88,8 +88,8 @@ class HomeFragment : Fragment() {
                 "source" to "app_share",
                 "campaign" to "product_demo"
             )
-            pathType = PathType.UNGUESSABLE
-            expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES)
+            linkType = LinkType.UNGUESSABLE
+            expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES).toEpochMilli()
         }.addOnSuccessListener { (shortLink) ->
             createdLinkTextView.visibility = View.VISIBLE
             createdLinkTextView.text = "✅ Product link created:\n$shortLink"
@@ -113,8 +113,8 @@ class HomeFragment : Fragment() {
                 "source" to "app_share",
                 "campaign" to "summer_promo"
             )
-            pathType = PathType.SHORT
-            expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES)
+            linkType = LinkType.SHORT
+            expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES).toEpochMilli()
         }.addOnSuccessListener { result ->
             val (shortLink) = result
             createdLinkTextView.visibility = View.VISIBLE

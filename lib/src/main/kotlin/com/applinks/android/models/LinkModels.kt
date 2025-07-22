@@ -1,10 +1,9 @@
 package com.applinks.android.models
 
-import com.applinks.android.serializers.InstantSerializer
-import com.applinks.android.serializers.NullableInstantSerializer
+import com.applinks.android.serializers.LongToIsoSerializer
+import com.applinks.android.serializers.NullableLongToIsoSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import java.time.Instant
 
 @Serializable
 data class LinkResponse(
@@ -20,14 +19,14 @@ data class LinkResponse(
     @SerialName("deep_link_params")
     val deepLinkParams: Map<String, String>,
     @SerialName("expires_at")
-    @Serializable(with = NullableInstantSerializer::class)
-    val expiresAt: Instant? = null,
+    @Serializable(with = NullableLongToIsoSerializer::class)
+    val expiresAt: Long? = null,
     @SerialName("created_at")
-    @Serializable(with = InstantSerializer::class)
-    val createdAt: Instant,
+    @Serializable(with = LongToIsoSerializer::class)
+    val createdAt: Long,
     @SerialName("updated_at")
-    @Serializable(with = InstantSerializer::class)
-    val updatedAt: Instant,
+    @Serializable(with = LongToIsoSerializer::class)
+    val updatedAt: Long,
     @SerialName("full_url")
     val fullUrl: String,
 )
@@ -61,12 +60,12 @@ data class LinkData(
     @SerialName("original_url")
     val originalUrl: String? = null,
     @SerialName("deep_link_path")
-    val deepLinkPath: String? = null,
+    val deepLinkPath: String,
     @SerialName("deep_link_params")
     val deepLinkParams: Map<String, String>? = null,
     @SerialName("expires_at")
-    @Serializable(with = NullableInstantSerializer::class)
-    val expiresAt: Instant? = null,
+    @Serializable(with = NullableLongToIsoSerializer::class)
+    val expiresAt: Long? = null,
     @SerialName("alias_path_attributes")
     val aliasPathAttributes: AliasPathAttributes? = null
 )

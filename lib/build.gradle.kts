@@ -20,9 +20,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
-    
+
     // Navigation Component dependencies - optional for apps that want to use NavigationLinkHandler
     compileOnly("androidx.navigation:navigation-runtime-ktx:2.7.6")
     compileOnly("androidx.core:core-ktx:1.12.0")
@@ -62,11 +60,7 @@ android {
     buildFeatures {
         buildConfig = true
     }
-
-    compileOptions {
-        isCoreLibraryDesugaringEnabled = true
-    }
-
+    
     namespace = "com.applinks.android"
 }
 

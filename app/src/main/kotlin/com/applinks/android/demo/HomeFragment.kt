@@ -14,7 +14,6 @@ import com.applinks.android.AppLinksSDK
 import com.applinks.android.PathType
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import java.time.temporal.TemporalAmount
 
 class HomeFragment : Fragment() {
     
@@ -79,8 +78,8 @@ class HomeFragment : Fragment() {
     }
     
     private fun createProductLink() {
-        AppLinksSDK.getInstance().linkShortener.createShortLinkAsync {
-            web_link = Uri.parse("https://example.com/product/456")
+        AppLinksSDK.getInstance().linkShortener.createLinkAsync {
+            webLink = Uri.parse("https://example.com/product/456")
             domain = "example.onapp.link"
             title = "Demo Product - Special Edition"
             deepLinkPath = "/product/456"
@@ -103,8 +102,8 @@ class HomeFragment : Fragment() {
     }
     
     private fun createPromoLink() {
-        AppLinksSDK.getInstance().linkShortener.createShortLinkAsync {
-            web_link = Uri.parse("https://example.com/promo/SPECIAL50")
+        AppLinksSDK.getInstance().linkShortener.createLinkAsync {
+            webLink = Uri.parse("https://example.com/promo/SPECIAL50")
             domain = "example.onapp.link"
             title = "Special Promotion - 50% Off"
             deepLinkPath = "/promo/SPECIAL50"

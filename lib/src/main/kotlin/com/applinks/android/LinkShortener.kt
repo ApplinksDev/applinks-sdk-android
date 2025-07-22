@@ -11,7 +11,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.core.net.toUri
 import java.time.Instant
-import java.time.format.DateTimeFormatter
 
 /**
  * Enum for link path types
@@ -36,7 +35,7 @@ class LinkShortener internal constructor(
     /**
      * API for creating short links
      */
-    fun createShortLinkAsync(builder: ShortLinkBuilder.() -> Unit): Task<ShortLinkResult> {
+    fun createLinkAsync(builder: ShortLinkBuilder.() -> Unit): Task<LinkCreationResult> {
         val linkBuilder = ShortLinkBuilder().apply(builder)
         return Task(apiClient, coroutineScope, linkBuilder)
     }
@@ -46,7 +45,7 @@ class LinkShortener internal constructor(
  * DSL Builder for creating short links
  */
 class ShortLinkBuilder {
-    var web_link: Uri? = null
+    var webLink: Uri? = null
     var domain: String? = null
     var title: String? = null
     var deepLinkPath: String? = null
@@ -55,12 +54,12 @@ class ShortLinkBuilder {
     var pathType: PathType = PathType.UNGUESSABLE
     
     internal fun build(): CreateLinkRequest {
-        requireNotNull(web_link) { "web_link must be set" }
+        requireNotNull(webLink) { "web_link must be set" }
         requireNotNull(domain) { "domain must be set" }
         
         val linkData = LinkData(
             title = title ?: "AppLinks Link",
-            originalUrl = web_link.toString(),
+            originalUrl = webLink.toString(),
             deepLinkPath = deepLinkPath,
             deepLinkParams = deepLinkParams,
             expiresAt = expiresAt,
@@ -106,10 +105,10 @@ class Task<T> internal constructor(
                 withContext(Dispatchers.Main) {
                     when (result) {
                         is AppLinksApiClient.Result.Success -> {
-                            val shortLinkResult = ShortLinkResult(
-                                shortLink = result.data.fullUrl.toUri(),
+                            val LinkCreationResult = LinkCreationResult(
+                                fullUrl = result.data.fullUrl.toUri(),
                             )
-                            successListener?.invoke(shortLinkResult as T)
+                            successListener?.invoke(LinkCreationResult as T)
                         }
                         is AppLinksApiClient.Result.Error -> {
                             failureListener?.invoke(Exception(result.message))
@@ -128,7 +127,7 @@ class Task<T> internal constructor(
 /**
  * Result class for short link creation
  */
-data class ShortLinkResult(
-    val shortLink: Uri,
+data class LinkCreationResult(
+    val fullUrl: Uri,
 )
 

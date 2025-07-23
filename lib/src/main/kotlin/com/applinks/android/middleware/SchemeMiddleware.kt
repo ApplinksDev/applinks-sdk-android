@@ -29,7 +29,18 @@ class SchemeMiddleware(
         Log.d(TAG, "Processing custom scheme link: $uri")
 
         // Parse the custom scheme link
-        context.deepLinkPath = uri.path ?: ""
+        // Include host in the path for custom schemes (e.g., myapp://host/path -> host/path)
+        val host = uri.host ?: ""
+        val path = uri.path ?: ""
+        context.deepLinkPath = if (host.isNotEmpty()) {
+            if (path.startsWith("/")) {
+                "$host$path"
+            } else {
+                "$host/$path"
+            }
+        } else {
+            path
+        }
 
         // Extract query parameters
         uri.queryParameterNames.forEach { param ->

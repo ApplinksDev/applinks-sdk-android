@@ -1,4 +1,4 @@
-package com.applinks.android.handlers
+package com.applinks.android.middleware
 
 import android.content.Context
 import android.net.Uri
@@ -15,12 +15,12 @@ class MiddlewareChain(
         private const val TAG = "MiddlewareChain"
     }
     
-    private val middlewares = mutableListOf<Middleware>()
+    private val middlewares = mutableListOf<LinkMiddleware>()
     
     /**
      * Add a middleware to the chain
      */
-    fun addMiddleware(middleware: Middleware) {
+    fun addMiddleware(middleware: LinkMiddleware) {
         middlewares.add(middleware)
         
         Log.d(TAG, "Added middleware: ${middleware.javaClass.simpleName}")
@@ -29,7 +29,7 @@ class MiddlewareChain(
     /**
      * Remove a middleware from the chain
      */
-    fun removeMiddleware(middleware: Middleware) {
+    fun removeMiddleware(middleware: LinkMiddleware) {
         middlewares.remove(middleware)
     }
     
@@ -38,6 +38,10 @@ class MiddlewareChain(
      */
     fun clearMiddlewares() {
         middlewares.clear()
+    }
+
+    fun canHandle(uri: Uri): Boolean {
+        return middlewares.any { it.canHandle(uri) }
     }
     
     /**
@@ -92,7 +96,27 @@ class MiddlewareChain(
     /**
      * Get all registered middlewares
      */
-    fun getMiddlewares(): List<Middleware> {
+    fun getMiddlewares(): List<LinkMiddleware> {
         return middlewares.toList()
     }
+}
+
+/**
+ * Base interface for middleware that processes links
+ */
+interface LinkMiddleware {
+    /**
+     * Process the link and modify the context
+     * @param context The current context
+     * @param uri The original URI being processed
+     * @param androidContext The Android context
+     * @param next Callback to continue to the next middleware in the chain
+     */
+    suspend fun process(context: LinkHandlingContext, uri: Uri, androidContext: Context, next: suspend (LinkHandlingContext) -> LinkHandlingContext): LinkHandlingContext
+
+    /**
+     * Returns whether this middleware can handle the given uri
+     * @param uri the URI to handle
+     */
+    fun canHandle(uri: Uri): Boolean
 }

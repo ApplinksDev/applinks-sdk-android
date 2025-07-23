@@ -1,4 +1,4 @@
-package com.applinks.android.handlers
+package com.applinks.android.middleware
 
 import android.content.Context
 import android.net.Uri
@@ -10,7 +10,7 @@ import java.util.Date
 data class LinkHandlingResult(
     val handled: Boolean,
     val originalUrl: Uri,
-    val schemeUrl: Uri,
+    val schemeUrl: Uri?,
     val path: String,
     val params: Map<String, String> = emptyMap(),
     val metadata: Map<String, Any> = emptyMap(),
@@ -28,17 +28,3 @@ data class LinkHandlingContext(
     var additionalData: MutableMap<String, Any> = mutableMapOf(),
     var schemeUrl: Uri? = null
 )
-
-/**
- * Base interface for middleware that processes links
- */
-interface Middleware {
-    /**
-     * Process the link and modify the context
-     * @param context The current context
-     * @param uri The original URI being processed
-     * @param androidContext The Android context
-     * @param next Callback to continue to the next middleware in the chain
-     */
-    suspend fun process(context: LinkHandlingContext, uri: Uri, androidContext: Context, next: suspend (LinkHandlingContext) -> LinkHandlingContext): LinkHandlingContext
-}

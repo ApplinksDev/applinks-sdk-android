@@ -1,17 +1,15 @@
 package com.applinks.android.demo
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.os.bundleOf
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.setupActionBarWithNavController
 import com.applinks.android.AppLinksSDK
-import com.applinks.android.handlers.LinkHandlingResult
+import com.applinks.android.middleware.LinkHandlingResult
 
 class MainActivity : AppCompatActivity(), AppLinksSDK.AppLinksListener {
     
@@ -85,7 +83,9 @@ class MainActivity : AppCompatActivity(), AppLinksSDK.AppLinksListener {
 
             try {
                 // Let Android Navigation Component handle the navigation automatically
-                navController.navigate(internalUri)
+                if (internalUri != null) {
+                    navController.navigate(internalUri)
+                }
                 Log.d("MainActivity", "Successfully navigated to: $internalUri")
             } catch (e: IllegalArgumentException) {
                 Log.e("MainActivity", "Invalid deep link URI: $internalUri", e)

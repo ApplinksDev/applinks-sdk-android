@@ -3,27 +3,25 @@ package com.applinks.android.middleware
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import com.applinks.android.handlers.LinkHandlingContext
-import com.applinks.android.handlers.Middleware
 
 /**
  * Middleware that handles custom scheme links (e.g., sweepy://path?foo=bar)
  */
 class SchemeMiddleware(
     private val supportedSchemes: Set<String>,
-) : Middleware {
+) : LinkMiddleware {
     
     companion object {
         private const val TAG = "SchemeMiddleware"
     }
     
     override suspend fun process(
-        context: LinkHandlingContext, 
-        uri: Uri, 
-        androidContext: Context, 
+        context: LinkHandlingContext,
+        uri: Uri,
+        androidContext: Context,
         next: suspend (LinkHandlingContext) -> LinkHandlingContext
     ): LinkHandlingContext {
-        if (!isCustomScheme(uri)) {
+        if (!canHandle(uri)) {
             // Not a custom scheme, continue to next middleware
             return next(context)
         }
@@ -47,8 +45,8 @@ class SchemeMiddleware(
 
         return next(context)
     }
-    
-    private fun isCustomScheme(uri: Uri): Boolean {
+
+    override fun canHandle(uri: Uri): Boolean {
         return uri.scheme != null && uri.scheme in supportedSchemes
     }
 }

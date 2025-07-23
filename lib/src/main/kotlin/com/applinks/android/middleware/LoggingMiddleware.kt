@@ -3,22 +3,20 @@ package com.applinks.android.middleware
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import com.applinks.android.handlers.LinkHandlingContext
-import com.applinks.android.handlers.Middleware
 
 /**
  * Middleware that logs the start and end of link processing
  */
-class LoggingMiddleware : Middleware {
+class LoggingMiddleware : LinkMiddleware {
     
     companion object {
         private const val TAG = "LoggingMiddleware"
     }
     
     override suspend fun process(
-        context: LinkHandlingContext, 
-        uri: Uri, 
-        androidContext: Context, 
+        context: LinkHandlingContext,
+        uri: Uri,
+        androidContext: Context,
         next: suspend (LinkHandlingContext) -> LinkHandlingContext
     ): LinkHandlingContext {
         val startTime = System.currentTimeMillis()
@@ -41,5 +39,9 @@ class LoggingMiddleware : Middleware {
         result.additionalData["processing_duration_ms"] = duration
         
         return result
+    }
+
+    override fun canHandle(uri: Uri): Boolean {
+        return false
     }
 }

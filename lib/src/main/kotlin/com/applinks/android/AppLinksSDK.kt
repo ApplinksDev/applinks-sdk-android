@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.applinks.android.api.AppLinksApiClient
-import com.applinks.android.handlers.*
 import com.applinks.android.middleware.*
 import com.applinks.android.storage.AppLinksPreferences
 import kotlinx.coroutines.CoroutineScope
@@ -18,7 +17,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  */
 class AppLinksSDK private constructor(
     private val config: Config,
-    private val customMiddlewares: List<Middleware> = emptyList(),
+    private val customMiddlewares: List<LinkMiddleware> = emptyList(),
     private val preferences: AppLinksPreferences,
     private val middlewareChain: MiddlewareChain,
     private val installReferrerManager: InstallReferrerManager
@@ -42,7 +41,7 @@ class AppLinksSDK private constructor(
         internal fun initialize(
             context: Context, 
             config: Config, 
-            customMiddlewares: List<Middleware>
+            customMiddlewares: List<LinkMiddleware>
         ): AppLinksSDK {
             synchronized(this) {
                 if (instance != null) {
@@ -123,7 +122,11 @@ class AppLinksSDK private constructor(
     /**
      * Process any type of link - universal or custom scheme
      */
-    fun handleLink(uri: Uri) {
+    fun handleLink(uri: Uri): Boolean {
+        if (!middlewareChain.canHandle(uri)){
+            return false
+        }
+
         coroutineScope.launch {
             val context = LinkHandlingContext(
                 isFirstLaunch = preferences.isFirstLaunch
@@ -137,8 +140,37 @@ class AppLinksSDK private constructor(
                 notifyListenersLinkReceived(result)
             }
         }
+        return true
     }
-    
+
+    suspend fun getAppLinkDetails(uri: Uri): LinkHandlingResult {
+        if (!middlewareChain.canHandle(uri)) {
+            return LinkHandlingResult(
+                handled = false,
+                originalUrl = uri,
+                schemeUrl = null,
+                path = "",
+                params = emptyMap(),
+                metadata = emptyMap(),
+                error = "This does not appear to be an AppLink",
+            )
+        }
+
+        val context = LinkHandlingContext(
+            isFirstLaunch = preferences.isFirstLaunch
+        )
+
+        val result = middlewareChain.processLink(uri, context)
+
+        if (result.error != null) {
+            notifyListenersError(result.error)
+        } else {
+            notifyListenersLinkReceived(result)
+        }
+        
+        return result
+    }
+
     /**
      * Check for deferred deep link only on first app launch
      */
@@ -310,7 +342,7 @@ class AppLinksSDK private constructor(
     /**
      * Add a custom middleware
      */
-    fun addCustomMiddleware(middleware: Middleware) {
+    fun addCustomMiddleware(middleware: LinkMiddleware) {
         middlewareChain.addMiddleware(middleware)
     }
     

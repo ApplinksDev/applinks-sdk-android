@@ -4,8 +4,6 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.applinks.android.api.AppLinksApiClient
-import com.applinks.android.handlers.LinkHandlingContext
-import com.applinks.android.handlers.Middleware
 
 /**
  * Middleware that handles universal links (HTTP/HTTPS from supported domains)
@@ -15,19 +13,19 @@ class UniversalLinkMiddleware(
     private val supportedDomains: Set<String>,
     private val apiClient: AppLinksApiClient,
     private val supportedSchemes: Set<String> = emptySet()
-) : Middleware {
+) : LinkMiddleware {
     
     companion object {
         private const val TAG = "UniversalLinkMiddleware"
     }
     
     override suspend fun process(
-        context: LinkHandlingContext, 
-        uri: Uri, 
-        androidContext: Context, 
+        context: LinkHandlingContext,
+        uri: Uri,
+        androidContext: Context,
         next: suspend (LinkHandlingContext) -> LinkHandlingContext
     ): LinkHandlingContext {
-        if (!isUniversalLink(uri)) {
+        if (!canHandle(uri)) {
             // Not a universal link, continue to next middleware
             return next(context)
         }
@@ -59,7 +57,7 @@ class UniversalLinkMiddleware(
         return next(context)
     }
     
-    private fun isUniversalLink(uri: Uri): Boolean {
+    override fun canHandle(uri: Uri): Boolean {
         return when {
             uri.scheme !in setOf("http", "https") -> false
             uri.host == null -> false

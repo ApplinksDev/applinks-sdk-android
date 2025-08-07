@@ -47,10 +47,16 @@ class ShortLinkBuilder {
     var webLink: Uri? = null
     var domain: String? = null
     var title: String? = null
+    var subtitle: String? = null
     var deepLinkPath: String? = null
     var deepLinkParams: Map<String, String>? = null
     var expiresAt: Long? = null
     var linkType: LinkType = LinkType.UNGUESSABLE
+    var backgroundType: String? = null
+    var backgroundColor: String? = null
+    var backgroundColorFrom: String? = null
+    var backgroundColorTo: String? = null
+    var backgroundColorDirection: String? = null
     
     internal fun build(): CreateLinkRequest {
         val validDomain = domain ?: throw IllegalArgumentException("domain must be set")
@@ -59,11 +65,17 @@ class ShortLinkBuilder {
         
         val linkData = LinkData(
             title = validTitle,
+            subtitle = subtitle,
             originalUrl = webLink?.toString(),
             deepLinkPath = validDeepLinkPath,
             deepLinkParams = deepLinkParams,
             expiresAt = expiresAt,
-            aliasPathAttributes = AliasPathAttributes(type = linkType.value)
+            aliasPathAttributes = AliasPathAttributes(type = linkType.value),
+            backgroundType = backgroundType,
+            backgroundColor = backgroundColor,
+            backgroundColorFrom = backgroundColorFrom,
+            backgroundColorTo = backgroundColorTo,
+            backgroundColorDirection = backgroundColorDirection
         )
         
         return CreateLinkRequest(

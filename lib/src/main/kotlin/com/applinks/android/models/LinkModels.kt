@@ -57,6 +57,7 @@ data class CreateLinkRequest(
 @Serializable
 data class LinkData(
     val title: String,
+    val subtitle: String? = null,
     @SerialName("original_url")
     val originalUrl: String? = null,
     @SerialName("deep_link_path")
@@ -67,7 +68,17 @@ data class LinkData(
     @Serializable(with = NullableLongToIsoSerializer::class)
     val expiresAt: Long? = null,
     @SerialName("alias_path_attributes")
-    val aliasPathAttributes: AliasPathAttributes? = null
+    val aliasPathAttributes: AliasPathAttributes? = null,
+    @SerialName("background_type")
+    val backgroundType: String? = null,
+    @SerialName("background_color")
+    val backgroundColor: String? = null,
+    @SerialName("background_color_from")
+    val backgroundColorFrom: String? = null,
+    @SerialName("background_color_to")
+    val backgroundColorTo: String? = null,
+    @SerialName("background_color_direction")
+    val backgroundColorDirection: String? = null
 )
 
 @Serializable

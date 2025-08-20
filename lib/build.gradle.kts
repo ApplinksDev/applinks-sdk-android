@@ -8,7 +8,7 @@
 import java.time.LocalDate
 
 plugins {
-    id("com.android.library") version "8.11.0"
+    id("com.android.library") version "8.11.1"
     id("org.jetbrains.kotlin.android") version "2.1.21"
     kotlin("plugin.serialization") version "2.1.21"
     id("com.vanniktech.maven.publish") version "0.34.0"

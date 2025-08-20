@@ -41,6 +41,11 @@ class AppLinksSDKBuilder(private val context: Context) {
         return this
     }
     
+    fun deferredDeepLinkingEnabled(enabled: Boolean): AppLinksSDKBuilder {
+        config = config.copy(deferredDeepLinkingEnabled = enabled)
+        return this
+    }
+    
     fun addCustomMiddleware(middleware: LinkMiddleware): AppLinksSDKBuilder {
         customMiddlewares.add(middleware)
         return this

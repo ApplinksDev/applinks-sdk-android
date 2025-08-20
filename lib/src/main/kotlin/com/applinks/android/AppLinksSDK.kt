@@ -66,7 +66,8 @@ class AppLinksSDK private constructor(
         val serverUrl: String = "https://applinks.com",
         val apiKey: String? = null,
         val supportedDomains: Set<String> = emptySet(),
-        val supportedSchemes: Set<String> = emptySet()
+        val supportedSchemes: Set<String> = emptySet(),
+        val deferredDeepLinkingEnabled: Boolean = true
     )
     
     private val apiClient: AppLinksApiClient = AppLinksApiClient(
@@ -172,6 +173,21 @@ class AppLinksSDK private constructor(
     }
 
     /**
+     * Manually check for deferred deep links
+     * @param callback Callback to receive the result or error
+     */
+    fun checkForDeferredDeepLink(callback: (LinkHandlingResult?) -> Unit) {
+        processDeferredDeepLink(markFirstLaunch = false, callback)
+    }
+
+    /**
+     * Add a custom middleware
+     */
+    fun addCustomMiddleware(middleware: LinkMiddleware) {
+        middlewareChain.addMiddleware(middleware)
+    }
+
+    /**
      * Check for deferred deep link only on first app launch
      */
     private fun checkForDeferredDeepLinkIfFirstLaunch() {
@@ -180,43 +196,76 @@ class AppLinksSDK private constructor(
             return
         }
 
+        if (!config.deferredDeepLinkingEnabled) {
+            Log.d(TAG, "Deferred deep linking disabled - skipping check")
+            preferences.markFirstLaunchCompleted()
+            return
+        }
+
         Log.d(TAG, "First launch detected - checking for deferred deep link")
-        checkForDeferredDeepLink()
+        performAutomaticDeferredDeepLinkCheck()
     }
     
     /**
      * Automatically check for deferred deep link during SDK initialization
      */
-    private fun checkForDeferredDeepLink() {
+    private fun performAutomaticDeferredDeepLinkCheck() {
+        processDeferredDeepLink(markFirstLaunch = true) { result ->
+            result?.let { 
+                coroutineScope.launch {
+                    notifyListenersLinkReceived(it)
+                }
+            }
+        }
+    }
+    
+    
+    /**
+     * Unified deferred deep link processor - handles both automatic and manual flows
+     */
+    private fun processDeferredDeepLink(
+        markFirstLaunch: Boolean, 
+        resultHandler: (LinkHandlingResult?) -> Unit
+    ) {
         coroutineScope.launch {
             installReferrerManager.retrieveInstallReferrer(
                 object : InstallReferrerManager.InstallReferrerCallback {
                     override fun onReferrerRetrieved(referrerData: InstallReferrerManager.ReferrerData) {
-                        Log.d(TAG, "Install referrer retrieved: ${referrerData.installReferrer}")
-
-                        // Mark first launch as completed
-                        preferences.markFirstLaunchCompleted()
+                        Log.d(TAG, "Referrer retrieved: ${referrerData.installReferrer}")
+                        
+                        if (markFirstLaunch) {
+                            preferences.markFirstLaunchCompleted()
+                        }
                         
                         // Process the referrer data for deep links
-                        processReferrerForDeepLink(referrerData.installReferrer)
-                        
+                        processReferrerWithCallback(referrerData.installReferrer, resultHandler)
                     }
                     
                     override fun onError(error: String) {
                         Log.d(TAG, "No install referrer found or error: $error")
-
-                        // Mark first launch as completed even if no referrer found
-                        preferences.markFirstLaunchCompleted()
+                        
+                        if (markFirstLaunch) {
+                            preferences.markFirstLaunchCompleted()
+                        }
+                        
+                        coroutineScope.launch {
+                            withContext(Dispatchers.Main) {
+                                resultHandler(null)
+                            }
+                        }
                     }
                 }
             )
         }
     }
     
-    private fun processReferrerForDeepLink(referrerString: String) {
+    /**
+     * Processes referrer and calls back with result
+     */
+    private fun processReferrerWithCallback(referrerString: String, callback: (LinkHandlingResult?) -> Unit) {
         coroutineScope.launch {
             try {
-                Log.d(TAG, "Processing referrer for deep link: $referrerString")
+                Log.d(TAG, "Processing referrer: $referrerString")
                 
                 // Parse the URL-encoded referrer string as a URI
                 val referrerUri = Uri.parse(referrerString)
@@ -227,15 +276,19 @@ class AppLinksSDK private constructor(
                 
                 val result = middlewareChain.processLink(referrerUri, context)
                 
-                if (result.error != null) {
-                    notifyListenersError(result.error)
-                } else {
-                    notifyListenersLinkReceived(result)
-                    Log.d(TAG, "Deferred deep link processed: ${result.path}")
+                withContext(Dispatchers.Main) {
+                    if (result.error != null) {
+                        callback(null)
+                    } else {
+                        callback(result)
+                        Log.d(TAG, "Deferred deep link processed: ${result.path}")
+                    }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error processing referrer for deep link", e)
-                notifyListenersError("Error processing deferred deep link: ${e.message}")
+                Log.e(TAG, "Error processing referrer", e)
+                withContext(Dispatchers.Main) {
+                    callback(null)
+                }
             }
         }
     }
@@ -338,13 +391,4 @@ class AppLinksSDK private constructor(
             }
         }
     }
-    
-    /**
-     * Add a custom middleware
-     */
-    fun addCustomMiddleware(middleware: LinkMiddleware) {
-        middlewareChain.addMiddleware(middleware)
-    }
-    
-    
 }

@@ -124,15 +124,15 @@ class AppLinksSDK private constructor(
      * Process any type of link - universal or custom scheme
      */
     fun handleLink(uri: Uri): Boolean {
-        if (!middlewareChain.canHandle(uri)){
-            return false
-        }
-
+        val canHandleLink = middlewareChain.canHandle(uri)
         coroutineScope.launch {
             val context = LinkHandlingContext(
                 isFirstLaunch = preferences.isFirstLaunch
             )
-            
+
+            if (!canHandleLink) {
+                notifyListenersLinkReceived(rejectedLinkResult(uri))
+            }
             val result = middlewareChain.processLink(uri, context)
             
             if (result.error != null) {
@@ -141,7 +141,7 @@ class AppLinksSDK private constructor(
                 notifyListenersLinkReceived(result)
             }
         }
-        return true
+        return canHandleLink
     }
 
     suspend fun getAppLinkDetails(uri: Uri): LinkHandlingResult {
@@ -273,7 +273,12 @@ class AppLinksSDK private constructor(
                 val context = LinkHandlingContext(
                     isFirstLaunch = preferences.isFirstLaunch
                 )
-                
+
+                if (!middlewareChain.canHandle(referrerUri)) {
+                    callback(rejectedLinkResult(referrerUri))
+                    return@launch
+                }
+
                 val result = middlewareChain.processLink(referrerUri, context)
                 
                 withContext(Dispatchers.Main) {
@@ -292,7 +297,18 @@ class AppLinksSDK private constructor(
             }
         }
     }
-    
+
+    private fun rejectedLinkResult(uri: Uri): LinkHandlingResult {
+        return LinkHandlingResult(
+            handled = false,
+            originalUrl = uri,
+            schemeUrl = null,
+            path = "",
+            params = emptyMap(),
+            metadata = emptyMap(),
+            error = "This does not appear to be an AppLink",
+        )
+    }
 
     /**
      * Listener interface for incoming deep links

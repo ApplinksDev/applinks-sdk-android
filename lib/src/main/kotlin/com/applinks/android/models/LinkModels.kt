@@ -13,7 +13,7 @@ data class LinkResponse(
     val aliasPath: String,
     val domain: String,
     @SerialName("original_url")
-    val originalUrl: String,
+    val originalUrl: String? = null,
     @SerialName("deep_link_path")
     val deepLinkPath: String,
     @SerialName("deep_link_params")

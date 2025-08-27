@@ -33,10 +33,10 @@ class SchemeMiddleware(
         val host = uri.host ?: ""
         val path = uri.path ?: ""
         context.deepLinkPath = if (host.isNotEmpty()) {
-            if (path.startsWith("/")) {
-                "/$host$path"
-            } else {
-                "/$host/$path"
+            when {
+                path.isEmpty() || path == "/" -> "/$host"
+                path.startsWith("/") -> "/$host$path"
+                else -> "/$host/$path"
             }
         } else {
             path

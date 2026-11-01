@@ -183,20 +183,22 @@ On a fresh install, right after the first deferred deep link lookup (the automat
 | `ads_consent` | What you passed to `updateConsent`, `false` until then |
 | `limited_data_use` | What you passed to `updateConsent`, `false` until then |
 | `advertising_id` | What you passed to `setAdvertisingId`. Left out until then |
-| `app_version`, `os_version` | The app's `versionName` and the Android version |
+| `app_version`, `os_version` | The app's `versionName` and the Android version, cut to 64 characters |
 
 Only the click ID is read from the install referrer: the rest of the referrer never leaves the device. The deep link is delivered exactly as before and doesn't wait for the report, and the `ck` parameter is removed from `LinkHandlingResult.params`.
 
-- The SDK needs an API key (`apiKey`) to report. When the report can't reach Applinks (no network, a server error), it's sent again at the next launch.
+- The SDK needs an API key (`apiKey`) to report. When the report can't reach Applinks (no network, a server error), it's sent again at the next launch. Applinks recognises a repeated report by its click ID; an install without one can't be recognised, so if Applinks recorded it but its answer was lost (a timeout), the retry counts it a second time.
 - A refused report isn't retried, and the SDK logs why: "App not found" (404) means the package name isn't set as the Android bundle ID of a project you're a member of; 401 means the API key is wrong.
-- Apps updated from an SDK version without install attribution don't report: they aren't new installs.
+- Apps updated from an SDK version without install attribution don't report: they aren't new installs. When you add the SDK to an existing app, its users don't report either, except those who installed the app in the last 30 days.
+- The SDK's state isn't carried to another device or a reinstall by Auto Backup or a device transfer: a restored install starts without an attribution (and isn't reported, as its first launch was restored too).
 - Turn it off with `.installAttributionEnabled(false)`.
 
 ### Conversions: attributionId and your backend
 
-Once the install is reported, `AppLinksSDK.getInstance().attributionId` holds its ID (it's `null` until then). Send it to your backend, for example with the user's profile. Your backend reports the user's conversions with `POST /api/v1/conversions`, its `attribution_id` and your **private** key (`sk_`). The app never reports conversions itself: private keys must never ship in an app.
+Once the install is reported, `AppLinksSDK.getInstance().attributionId` holds its ID. The report runs in the background after the install referrer lookup, so on the first launch the ID is usually still `null` when your `Application` and first activity start, and it stays `null` until a later launch when the report had to be retried. Nothing notifies you when it's set: read it each time you're about to talk to your backend (sign-up, login, purchase, or each launch) and send it until your backend has it. Your backend reports the user's conversions with `POST /api/v1/conversions`, its `attribution_id` and your **private** key (`sk_`). The app never reports conversions itself: private keys must never ship in an app.
 
 ```kotlin
+// For example at sign-up, and at each launch until your backend has it
 AppLinksSDK.getInstance().attributionId?.let { attributionId ->
     api.updateProfile(attributionId = attributionId)  // your own backend call
 }
@@ -226,7 +228,7 @@ val info = AdvertisingIdClient.getAdvertisingIdInfo(context)
 AppLinksSDK.getInstance().setAdvertisingId(if (info.isLimitAdTrackingEnabled) null else info.id)
 ```
 
-Applinks keeps the advertising ID only while `ads_consent` is `true`, and deletes it 7 days after the install. An ID set before consent, or kept while consent was withdrawn, is sent again when `updateConsent(adsConsent = true)` is called.
+Applinks keeps the advertising ID only while `ads_consent` is `true`, and deletes it 7 days after the install. An ID set before consent, or kept while consent was withdrawn, is sent again when `updateConsent(adsConsent = true)` is called. The ID must be a UUID, as `AdvertisingIdClient` returns it: the SDK ignores any other value (and the zeroed ID), logging a warning, and treats it as no ID.
 
 ## API Key Security
 

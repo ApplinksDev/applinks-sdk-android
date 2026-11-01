@@ -32,6 +32,7 @@ dependencies {
     testImplementation("org.junit.platform:junit-platform-launcher:1.10.1")
     testImplementation("org.junit.platform:junit-platform-commons:1.10.1")
     testImplementation("org.junit.platform:junit-platform-engine:1.10.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
@@ -59,6 +60,11 @@ android {
 
     buildFeatures {
         buildConfig = true
+    }
+
+    // android.util.Log returns defaults in JVM unit tests instead of throwing
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
     
     namespace = "com.applinks.android"

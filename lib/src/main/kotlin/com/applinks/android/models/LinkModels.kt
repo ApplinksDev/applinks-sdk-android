@@ -85,3 +85,23 @@ data class LinkData(
 data class AliasPathAttributes(
     val type: String
 )
+
+/**
+ * The answer to an install report or a consent update. The matched link isn't
+ * read: the deep link comes from the install referrer, as before.
+ */
+@Serializable
+internal data class AttributionResponse(
+    @SerialName("attribution_id")
+    val attributionId: String,
+    val matched: Boolean = false,
+)
+
+/**
+ * The answer to an install report: created is false when Applinks had
+ * already recorded this install (200), and kept only stricter consent from it.
+ */
+internal data class InstallReport(
+    val attribution: AttributionResponse,
+    val created: Boolean,
+)

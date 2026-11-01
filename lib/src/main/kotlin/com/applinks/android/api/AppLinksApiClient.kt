@@ -2,11 +2,13 @@ package com.applinks.android.api
 
 import android.util.Log
 import com.applinks.android.AppLinksSDKVersion
+import com.applinks.android.models.AttributionResponse
 import com.applinks.android.models.CreateLinkRequest
 import com.applinks.android.models.ErrorResponse
 import com.applinks.android.models.LinkResponse
 import com.applinks.android.models.RetrieveLinkRequest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -53,10 +55,10 @@ class AppLinksApiClient(
         return requestBuilder.build()
     }
     
-    private fun buildPostRequest(url: String, body: String): Request {
+    private fun buildPostRequest(url: String, body: String, method: String = "POST"): Request {
         val requestBuilder = Request.Builder()
             .url(url)
-            .post(body.toRequestBody("application/json".toMediaType()))
+            .method(method, body.toRequestBody("application/json".toMediaType()))
             .addHeader("Accept", "application/json")
             .addHeader("Content-Type", "application/json")
             .addHeader("User-Agent", AppLinksSDKVersion.userAgent)
@@ -141,5 +143,25 @@ class AppLinksApiClient(
         val request = buildPostRequest(url, requestBody)
         
         return executeRequest<LinkResponse>(request, "link")
+    }
+
+    /**
+     * Reports the app's install (POST /api/v1/attributions)
+     */
+    internal fun reportInstall(body: JsonObject): Result<AttributionResponse> {
+        Log.d(TAG, "Reporting install")
+
+        val request = buildPostRequest("$serverUrl/api/v1/attributions", body.toString())
+        return executeRequest<AttributionResponse>(request, "app")
+    }
+
+    /**
+     * Sends the fields of an install's attribution that changed (PATCH /api/v1/attributions/:id)
+     */
+    internal fun updateAttribution(attributionId: String, body: JsonObject): Result<AttributionResponse> {
+        Log.d(TAG, "Updating attribution $attributionId: ${body.keys}")
+
+        val request = buildPostRequest("$serverUrl/api/v1/attributions/$attributionId", body.toString(), "PATCH")
+        return executeRequest<AttributionResponse>(request, "attribution")
     }
 }

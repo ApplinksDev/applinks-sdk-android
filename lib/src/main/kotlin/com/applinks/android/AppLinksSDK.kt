@@ -2,8 +2,10 @@ package com.applinks.android
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import com.applinks.android.api.AppLinksApiClient
+import com.applinks.android.attribution.AttributionManager
 import com.applinks.android.middleware.*
 import com.applinks.android.storage.AppLinksPreferences
 import kotlinx.coroutines.CoroutineScope
@@ -20,7 +22,8 @@ class AppLinksSDK private constructor(
     private val customMiddlewares: List<LinkMiddleware> = emptyList(),
     private val preferences: AppLinksPreferences,
     private val middlewareChain: MiddlewareChain,
-    private val installReferrerManager: InstallReferrerManager
+    private val installReferrerManager: InstallReferrerManager,
+    private val appInfo: AttributionManager.AppInfo
 ) {
     companion object {
         private const val TAG = "AppLinksSDK"
@@ -54,9 +57,24 @@ class AppLinksSDK private constructor(
                 val preferences = AppLinksPreferences(appContext)
                 val middlewareChain = MiddlewareChain(appContext)
                 val installReferrerManager = InstallReferrerManager(appContext)
+                val appInfo = AttributionManager.AppInfo(
+                    bundleId = appContext.packageName,
+                    appVersion = appVersion(appContext),
+                    osVersion = Build.VERSION.RELEASE
+                )
                 
-                instance = AppLinksSDK(config, customMiddlewares, preferences, middlewareChain, installReferrerManager)
+                instance = AppLinksSDK(config, customMiddlewares, preferences, middlewareChain, installReferrerManager, appInfo)
                 return instance!!
+            }
+        }
+
+        private fun appVersion(context: Context): String? {
+            return try {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not read the app version", e)
+                null
             }
         }
     }
@@ -67,7 +85,8 @@ class AppLinksSDK private constructor(
         val apiKey: String? = null,
         val supportedDomains: Set<String> = emptySet(),
         val supportedSchemes: Set<String> = emptySet(),
-        val deferredDeepLinkingEnabled: Boolean = true
+        val deferredDeepLinkingEnabled: Boolean = true,
+        val installAttributionEnabled: Boolean = true
     )
     
     private val apiClient: AppLinksApiClient = AppLinksApiClient(
@@ -81,12 +100,32 @@ class AppLinksSDK private constructor(
      * API for creating short links
      */
     val linkShortener: LinkShortener = LinkShortener(apiClient, coroutineScope)
+
+    private val attributionManager = AttributionManager(
+        apiClient = apiClient,
+        store = preferences,
+        app = appInfo,
+        installAttributionEnabled = config.installAttributionEnabled,
+        apiKey = config.apiKey,
+        scope = coroutineScope,
+    )
+
+    /**
+     * The ID of this install's attribution, or null until the install was
+     * reported. Pass it to your backend: it reports the user's conversions with
+     * POST /api/v1/conversions and your private key.
+     */
+    val attributionId: String?
+        get() = attributionManager.attributionId
+
     private val linkListeners = CopyOnWriteArrayList<AppLinksListener>()
     private val pendingResults = mutableListOf<LinkHandlingResult>()
     private val pendingErrors = mutableListOf<String>()
     
     init {
         setupMiddlewares()
+        // Before the first launch check, which marks the first launch completed
+        attributionManager.start(freshInstall = preferences.isFirstLaunch)
         checkForDeferredDeepLinkIfFirstLaunch()
     }
     
@@ -181,6 +220,26 @@ class AppLinksSDK private constructor(
     }
 
     /**
+     * Sets the user's consent for ad measurement, from your app's own consent
+     * prompt. Call it when the user answers and whenever they change their
+     * choice. Until it's called, the SDK sends ads_consent false.
+     * @param adsConsent Whether the user allows ad measurement (true where no prompt is required)
+     * @param limitedDataUse Whether the user opted out of sharing under US state privacy laws
+     */
+    @JvmOverloads
+    fun updateConsent(adsConsent: Boolean, limitedDataUse: Boolean = false) {
+        attributionManager.updateConsent(adsConsent, limitedDataUse)
+    }
+
+    /**
+     * Sets the Google advertising ID (GAID) to send with the install, which
+     * your app reads itself, only with the user's consent. Pass null to remove it.
+     */
+    fun setAdvertisingId(advertisingId: String?) {
+        attributionManager.setAdvertisingId(advertisingId)
+    }
+
+    /**
      * Add a custom middleware
      */
     fun addCustomMiddleware(middleware: LinkMiddleware) {
@@ -239,6 +298,9 @@ class AppLinksSDK private constructor(
                         
                         // Process the referrer data for deep links
                         processReferrerWithCallback(referrerData.installReferrer, resultHandler)
+
+                        // Reported alongside the deep link, which doesn't wait for it
+                        attributionManager.onDeferredLookupFinished(referrerData.installReferrer)
                     }
                     
                     override fun onError(error: String) {
@@ -247,6 +309,9 @@ class AppLinksSDK private constructor(
                         if (markFirstLaunch) {
                             preferences.markFirstLaunchCompleted()
                         }
+
+                        // Reported as an install without a click
+                        attributionManager.onDeferredLookupFinished(null)
                         
                         coroutineScope.launch {
                             withContext(Dispatchers.Main) {

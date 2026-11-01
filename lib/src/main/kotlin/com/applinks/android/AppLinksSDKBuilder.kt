@@ -46,6 +46,15 @@ class AppLinksSDKBuilder(private val context: Context) {
         return this
     }
     
+    /**
+     * Whether the SDK reports the app's install to Applinks, so it's credited
+     * to the link click it came from (default: true)
+     */
+    fun installAttributionEnabled(enabled: Boolean): AppLinksSDKBuilder {
+        config = config.copy(installAttributionEnabled = enabled)
+        return this
+    }
+    
     fun addCustomMiddleware(middleware: LinkMiddleware): AppLinksSDKBuilder {
         customMiddlewares.add(middleware)
         return this

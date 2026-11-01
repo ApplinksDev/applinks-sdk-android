@@ -3,6 +3,7 @@ package com.applinks.android.middleware
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import com.applinks.android.attribution.ClickIds
 
 /**
  * Manages a chain of middlewares that process links sequentially
@@ -59,7 +60,8 @@ class MiddlewareChain(
                 originalUrl = uri,
                 schemeUrl = finalContext.schemeUrl ?: uri,
                 path = finalContext.deepLinkPath ?: "",
-                params = finalContext.deepLinkParams,
+                // The click ID is for the install report, not for the app
+                params = ClickIds.strip(finalContext.deepLinkParams),
                 metadata = finalContext.additionalData
             )
             

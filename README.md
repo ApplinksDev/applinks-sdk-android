@@ -226,7 +226,7 @@ val info = AdvertisingIdClient.getAdvertisingIdInfo(context)
 AppLinksSDK.getInstance().setAdvertisingId(if (info.isLimitAdTrackingEnabled) null else info.id)
 ```
 
-Applinks keeps the advertising ID only while `ads_consent` is `true`, and deletes it 7 days after the install.
+Applinks keeps the advertising ID only while `ads_consent` is `true`, and deletes it 7 days after the install. An ID set before consent, or kept while consent was withdrawn, is sent again when `updateConsent(adsConsent = true)` is called.
 
 ## API Key Security
 

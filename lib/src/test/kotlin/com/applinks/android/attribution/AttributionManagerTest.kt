@@ -1,5 +1,6 @@
 package com.applinks.android.attribution
 
+import com.applinks.android.InstallReferrerManager
 import com.applinks.android.api.AppLinksApiClient
 import com.applinks.android.storage.KeyValueStore
 import kotlinx.coroutines.CoroutineScope
@@ -19,7 +20,9 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
@@ -31,6 +34,9 @@ class AttributionManagerTest {
     private val ck = "9b2e4c1a-7f3d-4e8b-a2c6-5d1f0e9b8a7c"
     private val attributionId = "c41f5e2a-9d8b-4c7e-b6a1-3f2e1d0c9b8a"
     private val referrer = "app.sweepy.sweepy://promo/42?ref=ad&ck=$ck"
+    private val gaid = "38400000-8cf0-11bd-b23e-10b96e40000d"
+    private val day = TimeUnit.DAYS.toMillis(1)
+    private val now = 1_800_000_000_000L
 
     private lateinit var server: MockWebServer
     private val store = InMemoryStore()
@@ -54,13 +60,16 @@ class AttributionManagerTest {
         installAttributionEnabled: Boolean = true,
         apiKey: String? = "pk_test",
         serverUrl: String = server.url("/").toString().removeSuffix("/"),
+        firstInstallTime: Long? = now - 1000,
+        lastUpdateTime: Long? = now - 1000,
     ) = AttributionManager(
         apiClient = AppLinksApiClient(serverUrl = serverUrl, apiKey = apiKey),
         store = store,
-        app = AttributionManager.AppInfo("app.sweepy.sweepy", appVersion, osVersion),
+        app = AttributionManager.AppInfo("app.sweepy.sweepy", appVersion, osVersion, firstInstallTime, lastUpdateTime),
         installAttributionEnabled = installAttributionEnabled,
         apiKey = apiKey,
         scope = scope,
+        clock = { now },
     )
 
     private fun created(status: Int = 201) = MockResponse()
@@ -116,6 +125,8 @@ class AttributionManagerTest {
         assertEquals("application/json; charset=utf-8", request.getHeader("Content-Type"))
         assertEquals(installBody { put("click_id", ck) }, request.json())
         assertEquals(attributionId, sdk.attributionId)
+        // On disk before the report is cleared, so it isn't sent twice
+        assertTrue("attribution_id" in store.durableKeys)
     }
 
     @Test
@@ -231,16 +242,81 @@ class AttributionManagerTest {
     }
 
     @Test
-    fun `keeps the attribution of an install already reported (200)`() {
+    fun `keeps the attribution of an install already reported (200), and updates all its fields`() {
+        server.enqueue(created(status = 200))
+        server.enqueue(created(status = 200))
+        val sdk = manager()
+
+        sdk.start(freshInstall = true).await()
+        sdk.updateConsent(adsConsent = true).await()
+        sdk.setAdvertisingId(gaid).await()
+        sdk.onDeferredLookupFinished(referrer).await()
+
+        assertEquals("POST", server.takeRequest().method)
+        assertEquals(attributionId, sdk.attributionId)
+        // Applinks kept the first report's consent where it's stricter, and
+        // none of the repeat's advertising ID and versions
+        val update = server.takeRequest()
+        assertEquals("PATCH", update.method)
+        assertEquals("/api/v1/attributions/$attributionId", update.path)
+        val expected = buildJsonObject {
+            put("ads_consent", true)
+            put("limited_data_use", false)
+            put("advertising_id", gaid)
+            put("app_version", "2.3.1")
+            put("os_version", "14")
+        }
+        assertEquals(expected, update.json())
+
+        manager().start(freshInstall = false).await()
+        assertNull(nextRequest())
+    }
+
+    @Test
+    fun `sends a removed advertising ID as null after a 200`() {
+        server.enqueue(created(status = 200))
         server.enqueue(created(status = 200))
         val sdk = manager()
 
         sdk.start(freshInstall = true).await()
         sdk.onDeferredLookupFinished(referrer).await()
+        server.takeRequest()
 
-        assertEquals(attributionId, sdk.attributionId)
+        val expected = buildJsonObject {
+            put("ads_consent", false)
+            put("limited_data_use", false)
+            put("advertising_id", JsonNull)
+            put("app_version", "2.3.1")
+            put("os_version", "14")
+        }
+        assertEquals(expected, server.takeRequest().json())
+    }
+
+    @Test
+    fun `retries the update that follows a 200 at the next trigger`() {
+        server.enqueue(created(status = 200))
+        server.enqueue(error(503))
+        server.enqueue(created(status = 200))
+        val sdk = manager()
+
+        sdk.start(freshInstall = true).await()
+        sdk.updateConsent(adsConsent = true).await()
+        sdk.onDeferredLookupFinished(referrer).await()
+        server.takeRequest()
+        server.takeRequest()
+
         manager().start(freshInstall = false).await()
-        assertEquals(1, server.requestCount)
+        val expected = buildJsonObject {
+            put("ads_consent", true)
+            put("limited_data_use", false)
+            put("advertising_id", JsonNull)
+            put("app_version", "2.3.1")
+            put("os_version", "14")
+        }
+        assertEquals(expected, server.takeRequest().json())
+
+        manager().start(freshInstall = false).await()
+        assertNull(nextRequest())
     }
 
     @ParameterizedTest
@@ -443,6 +519,20 @@ class AttributionManagerTest {
         assertEquals(expected, server.takeRequest().json())
     }
 
+    @Test
+    fun `retries an update that failed with a network error at the next trigger`() {
+        reportInstall()
+        val offline = MockWebServer().apply { start() }
+        val offlineUrl = offline.url("/").toString().removeSuffix("/")
+        offline.shutdown()
+
+        manager(serverUrl = offlineUrl).setAdvertisingId(gaid).await()
+
+        server.enqueue(created(status = 200))
+        manager().start(freshInstall = false).await()
+        assertEquals(buildJsonObject { put("advertising_id", gaid) }, server.takeRequest().json())
+    }
+
     @ParameterizedTest
     @ValueSource(ints = [400, 404, 422])
     fun `treats a refused update as sent`(status: Int) {
@@ -498,13 +588,202 @@ class AttributionManagerTest {
         assertEquals(buildJsonObject { put("limited_data_use", false) }, server.takeRequest().json())
     }
 
+    @Test
+    fun `cuts app and OS versions to the 64 characters Applinks keeps`() {
+        val long = "2.3.1-beta.7+20261101.ci.4821.sha.9b2e4c1a7f3d4e8ba2c65d1f0e9b8a7c6d5e"
+        assertEquals(70, long.length)
+        server.enqueue(created())
+        val sdk = manager(appVersion = long, osVersion = "14$long")
+
+        sdk.start(freshInstall = true).await()
+        sdk.onDeferredLookupFinished(referrer).await()
+
+        val expected = installBody {
+            put("click_id", ck)
+            put("app_version", long.take(64))
+            put("os_version", "14$long".take(64))
+        }
+        assertEquals(expected, server.takeRequest().json())
+
+        // And it isn't seen as a new version at the next launch
+        manager(appVersion = long, osVersion = "14$long").start(freshInstall = false).await()
+        assertNull(nextRequest())
+    }
+
+    @Test
+    fun `sends only an advertising ID that is a UUID, trimmed`() {
+        server.enqueue(created())
+        val sdk = manager()
+        sdk.start(freshInstall = true).await()
+
+        sdk.setAdvertisingId(" $gaid\n").await()
+        sdk.onDeferredLookupFinished(referrer).await()
+        assertEquals(installBody { put("click_id", ck); put("advertising_id", gaid) }, server.takeRequest().json())
+
+        // Each is dropped, which removes the ID set before
+        listOf("not-a-uuid", "a1b2c3", "00000000-0000-0000-0000-000000000000").forEach { invalid ->
+            server.enqueue(created(status = 200))
+            sdk.setAdvertisingId(invalid).await()
+            assertEquals(JsonObject(mapOf("advertising_id" to JsonNull)), server.takeRequest().json(), invalid)
+
+            server.enqueue(created(status = 200))
+            sdk.setAdvertisingId(gaid).await()
+            assertEquals(buildJsonObject { put("advertising_id", gaid) }, server.takeRequest().json())
+        }
+    }
+
+    @Test
+    fun `stops reporting without crashing when the request can't be built`() {
+        listOf(
+            manager(serverUrl = "applinks.com"),     // no http(s)
+            manager(apiKey = "pk_te\nst"),          // a header can't hold it
+        ).forEach { sdk ->
+            sdk.start(freshInstall = true).await()
+            val report = sdk.onDeferredLookupFinished(referrer)
+            report.await()
+
+            // An exception would have failed the job, and crashed the app
+            assertFalse(report!!.isCancelled)
+            assertNull(sdk.attributionId)
+        }
+        // Refused, so not sent again with a valid configuration either
+        manager().start(freshInstall = false).await()
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `reports the referrer of a lookup that ran alongside one that failed`() {
+        server.enqueue(created())
+        val sdk = manager()
+        sdk.start(freshInstall = true).await()
+        val received = mutableListOf<String>()
+        val app = object : InstallReferrerManager.InstallReferrerCallback {
+            override fun onReferrerRetrieved(referrerData: InstallReferrerManager.ReferrerData) {
+                received += referrerData.installReferrer
+            }
+
+            override fun onError(error: String) {
+                received += error
+            }
+        }
+
+        val automatic = sdk.trackLookup(app)
+        val manual = sdk.trackLookup(app)
+        automatic.onError("Service not connected")
+        assertNull(nextRequest())
+
+        manual.onReferrerRetrieved(InstallReferrerManager.ReferrerData(referrer, 0, 0, false))
+        assertEquals(installBody { put("click_id", ck) }, server.takeRequest(5, TimeUnit.SECONDS)?.json())
+        assertEquals(listOf("Service not connected", referrer), received)
+    }
+
+    @Test
+    fun `reports an unmatched install once every lookup failed`() {
+        server.enqueue(created())
+        val sdk = manager()
+        sdk.start(freshInstall = true).await()
+        val app = object : InstallReferrerManager.InstallReferrerCallback {
+            override fun onReferrerRetrieved(referrerData: InstallReferrerManager.ReferrerData) {}
+            override fun onError(error: String) {}
+        }
+
+        val first = sdk.trackLookup(app)
+        val second = sdk.trackLookup(app)
+        first.onError("Install referrer service unavailable")
+        // A callback that runs twice finishes its lookup once
+        first.onError("Install referrer service unavailable")
+        assertNull(nextRequest())
+
+        second.onError("Install referrer not supported")
+        assertEquals(installBody(), server.takeRequest(5, TimeUnit.SECONDS)?.json())
+    }
+
+    @Test
+    fun `reports after the app's callback, even when it throws`() {
+        server.enqueue(created())
+        val sdk = manager()
+        sdk.start(freshInstall = true).await()
+        val app = object : InstallReferrerManager.InstallReferrerCallback {
+            override fun onReferrerRetrieved(referrerData: InstallReferrerManager.ReferrerData) {
+                throw IllegalStateException("app bug")
+            }
+
+            override fun onError(error: String) {}
+        }
+
+        runCatching { sdk.trackLookup(app).onReferrerRetrieved(InstallReferrerManager.ReferrerData(referrer, 0, 0, false)) }
+
+        assertEquals(installBody { put("click_id", ck) }, server.takeRequest(5, TimeUnit.SECONDS)?.json())
+    }
+
+    @Test
+    fun `doesn't report existing users of an app that adds the SDK in an update`() {
+        // Installed long ago, updated to the version with the SDK
+        val sdk = manager(firstInstallTime = now - 400 * day, lastUpdateTime = now - day)
+        sdk.start(freshInstall = true).await()
+        sdk.onDeferredLookupFinished(referrer).await()
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `reports a new install updated before its first launch`() {
+        listOf(
+            manager(firstInstallTime = now - 400 * day, lastUpdateTime = now - 400 * day), // never updated
+            manager(firstInstallTime = now - 10 * day, lastUpdateTime = now - day),        // installed recently
+            manager(firstInstallTime = null, lastUpdateTime = null),                       // unknown
+        ).forEach { sdk ->
+            server.enqueue(created())
+            store.clear()
+            sdk.start(freshInstall = true).await()
+            sdk.onDeferredLookupFinished(referrer).await()
+            assertEquals("POST", server.takeRequest(5, TimeUnit.SECONDS)?.method)
+        }
+    }
+
+    @Test
+    fun `forgets the attribution restored from a backup`() {
+        val sdk = reportInstall()
+        server.enqueue(created(status = 200))
+        server.enqueue(created(status = 200))
+        sdk.updateConsent(adsConsent = true).await()
+        sdk.setAdvertisingId(gaid).await()
+        server.takeRequest()
+        server.takeRequest()
+
+        // The new device's SDK starts with the old device's preferences
+        val restored = manager(osVersion = "15")
+        restored.forgetRestoredState()
+        restored.start(freshInstall = false).await()
+        restored.setAdvertisingId("6f1c2d3e-4b5a-4c7d-8e9f-0a1b2c3d4e5f").await()
+
+        assertNull(restored.attributionId)
+        assertNull(nextRequest())
+    }
+
+    @Test
+    fun `doesn't send the pending report restored from a backup`() {
+        server.enqueue(error(503))
+        val sdk = manager()
+        sdk.start(freshInstall = true).await()
+        sdk.onDeferredLookupFinished(referrer).await()
+        server.takeRequest()
+
+        val restored = manager()
+        restored.forgetRestoredState()
+        restored.start(freshInstall = false).await()
+
+        assertNull(nextRequest())
+    }
+
     private class InMemoryStore : KeyValueStore {
         private val values = ConcurrentHashMap<String, Any>()
+        val durableKeys: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
         override fun getString(key: String): String? = values[key] as String?
 
-        override fun putString(key: String, value: String?) {
+        override fun putString(key: String, value: String?, durable: Boolean) {
             if (value == null) values.remove(key) else values[key] = value
+            if (durable) durableKeys += key
         }
 
         override fun getBoolean(key: String, default: Boolean): Boolean = values[key] as Boolean? ?: default
@@ -512,5 +791,11 @@ class AttributionManagerTest {
         override fun putBoolean(key: String, value: Boolean) {
             values[key] = value
         }
+
+        override fun remove(key: String) {
+            values.remove(key)
+        }
+
+        fun clear() = values.clear()
     }
 }

@@ -1,8 +1,10 @@
 package com.applinks.android.attribution
 
 import android.util.Log
+import com.applinks.android.InstallReferrerManager
 import com.applinks.android.api.AppLinksApiClient
 import com.applinks.android.storage.KeyValueStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -11,6 +13,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.net.URLDecoder
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Reports the app's install to Applinks once, so it's credited to the link
@@ -29,13 +33,27 @@ internal class AttributionManager(
     installAttributionEnabled: Boolean,
     apiKey: String?,
     private val scope: CoroutineScope,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     /** What the install report says about the app */
     data class AppInfo(
         val bundleId: String,
         val appVersion: String?,
         val osVersion: String?,
-    )
+        // PackageInfo's, in milliseconds: null when they couldn't be read
+        val firstInstallTime: Long? = null,
+        val lastUpdateTime: Long? = null,
+    ) {
+        /**
+         * Whether the app was installed with the version that runs, or
+         * recently. An app that adds the SDK in an update has no SDK state,
+         * like a fresh install: its existing users installed long ago.
+         */
+        fun isNewInstall(now: Long): Boolean {
+            val installed = firstInstallTime ?: return true
+            return installed == lastUpdateTime || now - installed < NEW_INSTALL_WINDOW_MS
+        }
+    }
 
     private data class State(
         val adsConsent: Boolean,
@@ -47,6 +65,12 @@ internal class AttributionManager(
 
     companion object {
         private const val TAG = "AppLinksAttribution"
+
+        // An app updated before its first launch is still a new install
+        private val NEW_INSTALL_WINDOW_MS = TimeUnit.DAYS.toMillis(30)
+
+        // The longest app or OS version Applinks keeps (Attribution::VERSION_LENGTH)
+        private const val VERSION_LENGTH = 64
 
         // Shared by every instance: initializing the SDK twice must not report twice
         private val syncMutex = Mutex()
@@ -63,6 +87,19 @@ internal class AttributionManager(
         private const val KEY_SENT_ADVERTISING_ID = "attribution_sent_advertising_id"
         private const val KEY_SENT_APP_VERSION = "attribution_sent_app_version"
         private const val KEY_SENT_OS_VERSION = "attribution_sent_os_version"
+        // Set after a 200: Applinks kept only stricter consent and none of the
+        // advertising ID and versions, so every field is sent in an update
+        private const val KEY_SENT_UNKNOWN = "attribution_sent_unknown"
+
+        private val ALL_KEYS = listOf(
+            KEY_REPORT_DUE, KEY_LOOKUP_DONE, KEY_CLICK_ID, KEY_ATTRIBUTION_ID,
+            KEY_ADS_CONSENT, KEY_LIMITED_DATA_USE, KEY_ADVERTISING_ID,
+            KEY_SENT_ADS_CONSENT, KEY_SENT_LIMITED_DATA_USE, KEY_SENT_ADVERTISING_ID,
+            KEY_SENT_APP_VERSION, KEY_SENT_OS_VERSION, KEY_SENT_UNKNOWN,
+        )
+
+        private const val ZERO_ADVERTISING_ID = "00000000-0000-0000-0000-000000000000"
+        private val UUID_REGEX = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     }
 
     // Nothing is stored as due nor sent without an API key
@@ -77,6 +114,22 @@ internal class AttributionManager(
     // Only read and written while holding syncMutex.
     private var reportFailedThisSession = false
 
+    // Deferred deep link lookups started and not finished yet, guarded by this
+    private var lookupsInFlight = 0
+
+    /**
+     * Called when the SDK initializes, before [start], when its preferences
+     * were restored from another device or an earlier install (Auto Backup,
+     * device transfer): that install's attribution, consent and advertising ID
+     * aren't this one's, so they're forgotten.
+     */
+    fun forgetRestoredState() {
+        if (attributionId != null || store.getBoolean(KEY_REPORT_DUE, false)) {
+            Log.i(TAG, "Attribution state restored from a backup, forgotten")
+        }
+        ALL_KEYS.forEach { store.remove(it) }
+    }
+
     /**
      * Called when the SDK initializes. On a fresh install, the install report
      * becomes due; it's sent after the first deferred deep link lookup.
@@ -84,9 +137,44 @@ internal class AttributionManager(
     fun start(freshInstall: Boolean): Job? {
         if (!enabled) return null
         if (freshInstall && attributionId == null) {
-            store.putBoolean(KEY_REPORT_DUE, true)
+            if (app.isNewInstall(clock())) {
+                store.putBoolean(KEY_REPORT_DUE, true)
+            } else {
+                Log.d(TAG, "App installed before it had the SDK: not reported as a new install")
+            }
         }
         return launchSync()
+    }
+
+    /**
+     * Wraps the callback of a deferred deep link lookup: the app's callback
+     * runs first, then the lookup's referrer goes to [onDeferredLookupFinished].
+     * Call it when the lookup starts.
+     */
+    fun trackLookup(callback: InstallReferrerManager.InstallReferrerCallback): InstallReferrerManager.InstallReferrerCallback {
+        synchronized(this) { lookupsInFlight++ }
+        val finished = AtomicBoolean(false)
+        fun finish(referrer: String?) {
+            if (finished.compareAndSet(false, true)) onDeferredLookupFinished(referrer)
+        }
+        return object : InstallReferrerManager.InstallReferrerCallback {
+            override fun onReferrerRetrieved(referrerData: InstallReferrerManager.ReferrerData) {
+                try {
+                    callback.onReferrerRetrieved(referrerData)
+                } finally {
+                    finish(referrerData.installReferrer)
+                }
+            }
+
+            override fun onError(error: String) {
+                try {
+                    callback.onError(error)
+                } finally {
+                    // Reported as an install without a click
+                    finish(null)
+                }
+            }
+        }
     }
 
     /**
@@ -97,7 +185,12 @@ internal class AttributionManager(
     fun onDeferredLookupFinished(referrer: String?): Job? {
         if (!enabled) return null
         synchronized(this) {
+            lookupsInFlight = (lookupsInFlight - 1).coerceAtLeast(0)
             if (!store.getBoolean(KEY_REPORT_DUE, false) || store.getBoolean(KEY_LOOKUP_DONE, false)) return null
+            // A failed lookup waits for the ones still running (the app's
+            // manual check alongside the automatic one): they can still read
+            // the referrer, and the report is sent with the first referrer found
+            if (referrer == null && lookupsInFlight > 0) return null
             // Only the click ID is kept and sent, never the referrer itself
             store.putString(KEY_CLICK_ID, referrer?.let { ClickIds.fromReferrer(it) })
             store.putBoolean(KEY_LOOKUP_DONE, true)
@@ -112,11 +205,31 @@ internal class AttributionManager(
     }
 
     fun setAdvertisingId(advertisingId: String?): Job? {
-        store.putString(KEY_ADVERTISING_ID, advertisingId?.takeIf { it.isNotBlank() })
+        store.putString(KEY_ADVERTISING_ID, validAdvertisingId(advertisingId))
         return launchSync()
     }
 
-    private fun launchSync(): Job? = if (enabled) scope.launch { sync() } else null
+    // Applinks refuses a report or update with an advertising ID that isn't a
+    // UUID, so one that isn't is dropped; the zeroed ID is no ID at all
+    private fun validAdvertisingId(advertisingId: String?): String? {
+        val id = advertisingId?.trim()?.takeIf { it.isNotEmpty() && it != ZERO_ADVERTISING_ID } ?: return null
+        if (!UUID_REGEX.matches(id)) {
+            Log.w(TAG, "Ignored an advertising ID that isn't a UUID: pass the GAID as AdvertisingIdClient returns it")
+            return null
+        }
+        return id
+    }
+
+    private fun launchSync(): Job? = if (enabled) scope.launch {
+        // The app must never crash because of an attribution
+        try {
+            sync()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Attribution sync failed", e)
+        }
+    } else null
 
     /**
      * Sends what changed since the last successful send. Calls run one at a
@@ -155,10 +268,22 @@ internal class AttributionManager(
 
         when (val result = apiClient.reportInstall(body)) {
             is AppLinksApiClient.Result.Success -> {
-                Log.d(TAG, "Install reported (matched: ${result.data.matched})")
-                store.putString(KEY_ATTRIBUTION_ID, result.data.attributionId)
-                saveSent(state)
+                val attribution = result.data.attribution
+                Log.d(TAG, "Install reported (matched: ${attribution.matched}, new: ${result.data.created})")
+                // On disk before the report is cleared: a process killed in
+                // between must not report the install twice
+                store.putString(KEY_ATTRIBUTION_ID, attribution.attributionId, durable = true)
+                if (result.data.created) {
+                    saveSent(state)
+                } else {
+                    // Already reported (a lost answer, or a reinstall with the
+                    // same referrer): Applinks kept its stored consent where it's
+                    // stricter, and ignored the advertising ID and versions, so
+                    // they're all sent in an update
+                    store.putBoolean(KEY_SENT_UNKNOWN, true)
+                }
                 clearPendingReport()
+                if (!result.data.created) update(attribution.attributionId, state)
             }
             is AppLinksApiClient.Result.Error -> {
                 if (isRetryable(result.code)) {
@@ -174,18 +299,19 @@ internal class AttributionManager(
 
     private fun update(attributionId: String, state: State) {
         val sent = sentState()
+        val unknown = store.getBoolean(KEY_SENT_UNKNOWN, false)
         // Applinks keeps the advertising ID only while ads_consent is true: it
         // dropped the one sent without consent, or when consent was withdrawn,
         // so it's sent again when consent is given
         val consentGiven = state.adsConsent && !sent.adsConsent
         val body = buildJsonObject {
-            if (state.adsConsent != sent.adsConsent) put("ads_consent", state.adsConsent)
-            if (state.limitedDataUse != sent.limitedDataUse) put("limited_data_use", state.limitedDataUse)
-            if (state.advertisingId != sent.advertisingId || (consentGiven && state.advertisingId != null)) {
+            if (unknown || state.adsConsent != sent.adsConsent) put("ads_consent", state.adsConsent)
+            if (unknown || state.limitedDataUse != sent.limitedDataUse) put("limited_data_use", state.limitedDataUse)
+            if (unknown || state.advertisingId != sent.advertisingId || (consentGiven && state.advertisingId != null)) {
                 put("advertising_id", state.advertisingId)
             }
-            if (state.appVersion != null && state.appVersion != sent.appVersion) put("app_version", state.appVersion)
-            if (state.osVersion != null && state.osVersion != sent.osVersion) put("os_version", state.osVersion)
+            if (state.appVersion != null && (unknown || state.appVersion != sent.appVersion)) put("app_version", state.appVersion)
+            if (state.osVersion != null && (unknown || state.osVersion != sent.osVersion)) put("os_version", state.osVersion)
         }
         if (body.isEmpty()) return
 
@@ -219,8 +345,9 @@ internal class AttributionManager(
         adsConsent = store.getBoolean(KEY_ADS_CONSENT, false),
         limitedDataUse = store.getBoolean(KEY_LIMITED_DATA_USE, false),
         advertisingId = store.getString(KEY_ADVERTISING_ID),
-        appVersion = app.appVersion,
-        osVersion = app.osVersion,
+        // Applinks refuses a longer one, and with it the whole report
+        appVersion = app.appVersion?.take(VERSION_LENGTH),
+        osVersion = app.osVersion?.take(VERSION_LENGTH),
     )
 
     private fun sentState() = State(
@@ -237,6 +364,7 @@ internal class AttributionManager(
         store.putString(KEY_SENT_ADVERTISING_ID, state.advertisingId)
         store.putString(KEY_SENT_APP_VERSION, state.appVersion)
         store.putString(KEY_SENT_OS_VERSION, state.osVersion)
+        store.remove(KEY_SENT_UNKNOWN)
     }
 
     private fun clearPendingReport() {

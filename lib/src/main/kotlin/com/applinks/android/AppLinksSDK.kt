@@ -1,6 +1,7 @@
 package com.applinks.android
 
 import android.content.Context
+import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -57,10 +58,13 @@ class AppLinksSDK private constructor(
                 val preferences = AppLinksPreferences(appContext)
                 val middlewareChain = MiddlewareChain(appContext)
                 val installReferrerManager = InstallReferrerManager(appContext)
+                val packageInfo = packageInfo(appContext)
                 val appInfo = AttributionManager.AppInfo(
                     bundleId = appContext.packageName,
-                    appVersion = appVersion(appContext),
-                    osVersion = Build.VERSION.RELEASE
+                    appVersion = packageInfo?.versionName,
+                    osVersion = Build.VERSION.RELEASE,
+                    firstInstallTime = packageInfo?.firstInstallTime,
+                    lastUpdateTime = packageInfo?.lastUpdateTime
                 )
                 
                 instance = AppLinksSDK(config, customMiddlewares, preferences, middlewareChain, installReferrerManager, appInfo)
@@ -68,10 +72,10 @@ class AppLinksSDK private constructor(
             }
         }
 
-        private fun appVersion(context: Context): String? {
+        private fun packageInfo(context: Context): PackageInfo? {
             return try {
                 @Suppress("DEPRECATION")
-                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                context.packageManager.getPackageInfo(context.packageName, 0)
             } catch (e: Exception) {
                 Log.w(TAG, "Could not read the app version", e)
                 null
@@ -124,6 +128,9 @@ class AppLinksSDK private constructor(
     
     init {
         setupMiddlewares()
+        if (preferences.markInstallIfNew()) {
+            attributionManager.forgetRestoredState()
+        }
         // Before the first launch check, which marks the first launch completed
         attributionManager.start(freshInstall = preferences.isFirstLaunch)
         checkForDeferredDeepLinkIfFirstLaunch()
@@ -286,41 +293,37 @@ class AppLinksSDK private constructor(
         markFirstLaunch: Boolean, 
         resultHandler: (LinkHandlingResult?) -> Unit
     ) {
-        coroutineScope.launch {
-            installReferrerManager.retrieveInstallReferrer(
-                object : InstallReferrerManager.InstallReferrerCallback {
-                    override fun onReferrerRetrieved(referrerData: InstallReferrerManager.ReferrerData) {
-                        Log.d(TAG, "Referrer retrieved: ${referrerData.installReferrer}")
-                        
-                        if (markFirstLaunch) {
-                            preferences.markFirstLaunchCompleted()
-                        }
-                        
-                        // Process the referrer data for deep links
-                        processReferrerWithCallback(referrerData.installReferrer, resultHandler)
-
-                        // Reported alongside the deep link, which doesn't wait for it
-                        attributionManager.onDeferredLookupFinished(referrerData.installReferrer)
+        // The install report follows the app's callback, which doesn't wait for it
+        val callback = attributionManager.trackLookup(
+            object : InstallReferrerManager.InstallReferrerCallback {
+                override fun onReferrerRetrieved(referrerData: InstallReferrerManager.ReferrerData) {
+                    Log.d(TAG, "Referrer retrieved: ${referrerData.installReferrer}")
+                    
+                    if (markFirstLaunch) {
+                        preferences.markFirstLaunchCompleted()
                     }
                     
-                    override fun onError(error: String) {
-                        Log.d(TAG, "No install referrer found or error: $error")
-                        
-                        if (markFirstLaunch) {
-                            preferences.markFirstLaunchCompleted()
-                        }
+                    // Process the referrer data for deep links
+                    processReferrerWithCallback(referrerData.installReferrer, resultHandler)
+                }
+                
+                override fun onError(error: String) {
+                    Log.d(TAG, "No install referrer found or error: $error")
+                    
+                    if (markFirstLaunch) {
+                        preferences.markFirstLaunchCompleted()
+                    }
 
-                        // Reported as an install without a click
-                        attributionManager.onDeferredLookupFinished(null)
-                        
-                        coroutineScope.launch {
-                            withContext(Dispatchers.Main) {
-                                resultHandler(null)
-                            }
+                    coroutineScope.launch {
+                        withContext(Dispatchers.Main) {
+                            resultHandler(null)
                         }
                     }
                 }
-            )
+            }
+        )
+        coroutineScope.launch {
+            installReferrerManager.retrieveInstallReferrer(callback)
         }
     }
     

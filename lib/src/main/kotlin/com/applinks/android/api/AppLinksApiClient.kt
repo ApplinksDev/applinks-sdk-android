@@ -5,6 +5,7 @@ import com.applinks.android.AppLinksSDKVersion
 import com.applinks.android.models.AttributionResponse
 import com.applinks.android.models.CreateLinkRequest
 import com.applinks.android.models.ErrorResponse
+import com.applinks.android.models.InstallReport
 import com.applinks.android.models.LinkResponse
 import com.applinks.android.models.RetrieveLinkRequest
 import kotlinx.serialization.json.Json
@@ -70,7 +71,15 @@ class AppLinksApiClient(
         return requestBuilder.build()
     }
     
-    private inline fun <reified T> executeRequest(request: Request, resourceType: String): Result<T> {
+    private inline fun <reified T> executeRequest(request: Request, resourceType: String): Result<T> =
+        executeRequest<T, T>(request, resourceType) { data, _ -> data }
+
+    // wrap gets the decoded body and the status code (200 or 201)
+    private inline fun <reified T, R> executeRequest(
+        request: Request,
+        resourceType: String,
+        wrap: (T, Int) -> R
+    ): Result<R> {
         return try {
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string()
@@ -82,7 +91,7 @@ class AppLinksApiClient(
                         body?.let {
                             try {
                                 val result = json.decodeFromString<T>(it)
-                                Result.Success(result)
+                                Result.Success(wrap(result, response.code))
                             } catch (e: Exception) {
                                 Log.e(TAG, "Failed to parse $resourceType response", e)
                                 Result.Error("Failed to parse response: ${e.message}")
@@ -148,11 +157,17 @@ class AppLinksApiClient(
     /**
      * Reports the app's install (POST /api/v1/attributions)
      */
-    internal fun reportInstall(body: JsonObject): Result<AttributionResponse> {
+    internal fun reportInstall(body: JsonObject): Result<InstallReport> {
         Log.d(TAG, "Reporting install")
 
-        val request = buildPostRequest("$serverUrl/api/v1/attributions", body.toString())
-        return executeRequest<AttributionResponse>(request, "app")
+        val request = try {
+            buildPostRequest("$serverUrl/api/v1/attributions", body.toString())
+        } catch (e: IllegalArgumentException) {
+            return invalidRequest(e)
+        }
+        return executeRequest<AttributionResponse, InstallReport>(request, "app") { data, code ->
+            InstallReport(data, created = code == 201)
+        }
     }
 
     /**
@@ -161,7 +176,19 @@ class AppLinksApiClient(
     internal fun updateAttribution(attributionId: String, body: JsonObject): Result<AttributionResponse> {
         Log.d(TAG, "Updating attribution $attributionId: ${body.keys}")
 
-        val request = buildPostRequest("$serverUrl/api/v1/attributions/$attributionId", body.toString(), "PATCH")
+        val request = try {
+            buildPostRequest("$serverUrl/api/v1/attributions/$attributionId", body.toString(), "PATCH")
+        } catch (e: IllegalArgumentException) {
+            return invalidRequest(e)
+        }
         return executeRequest<AttributionResponse>(request, "attribution")
+    }
+
+    // A serverUrl without http(s) or an API key a header can't hold: the
+    // request can't be built, and sending it again won't help, so it's
+    // answered like a bad request
+    private fun invalidRequest(e: IllegalArgumentException): Result.Error {
+        Log.e(TAG, "Invalid request", e)
+        return Result.Error("Invalid request: ${e.message}", 400)
     }
 }

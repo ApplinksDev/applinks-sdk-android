@@ -96,3 +96,12 @@ internal data class AttributionResponse(
     val attributionId: String,
     val matched: Boolean = false,
 )
+
+/**
+ * The answer to an install report: created is false when Applinks had
+ * already recorded this install (200), and kept only stricter consent from it.
+ */
+internal data class InstallReport(
+    val attribution: AttributionResponse,
+    val created: Boolean,
+)

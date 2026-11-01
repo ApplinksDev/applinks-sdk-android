@@ -15,8 +15,6 @@ class InstallReferrerManager(
         private const val REFERRER_PARAM_LINK = "applinks_link"
     }
     
-    private var referrerClient: InstallReferrerClient? = null
-    
     interface InstallReferrerCallback {
         fun onReferrerRetrieved(referrerData: ReferrerData)
         fun onError(error: String)
@@ -35,28 +33,30 @@ class InstallReferrerManager(
     )
     
     fun retrieveInstallReferrer(callback: InstallReferrerCallback) {
-        referrerClient = InstallReferrerClient.newBuilder(context).build()
-        referrerClient?.startConnection(object : InstallReferrerStateListener {
+        // A client per lookup: the app's manual check can run alongside the
+        // automatic one, and each must read and close its own connection
+        val referrerClient = InstallReferrerClient.newBuilder(context).build()
+        referrerClient.startConnection(object : InstallReferrerStateListener {
             override fun onInstallReferrerSetupFinished(responseCode: Int) {
                 when (responseCode) {
                     InstallReferrerClient.InstallReferrerResponse.OK -> {
                         Log.d(TAG, "Install referrer connection established")
-                        getReferrerDetails(callback)
+                        getReferrerDetails(referrerClient, callback)
                     }
                     InstallReferrerClient.InstallReferrerResponse.FEATURE_NOT_SUPPORTED -> {
                         Log.e(TAG, "Install referrer not supported")
                         callback.onError("Install referrer not supported")
-                        disconnectReferrerClient()
+                        referrerClient.endConnection()
                     }
                     InstallReferrerClient.InstallReferrerResponse.SERVICE_UNAVAILABLE -> {
                         Log.e(TAG, "Install referrer service unavailable")
                         callback.onError("Install referrer service unavailable")
-                        disconnectReferrerClient()
+                        referrerClient.endConnection()
                     }
                     else -> {
                         Log.e(TAG, "Install referrer response code: $responseCode")
                         callback.onError("Unknown error: $responseCode")
-                        disconnectReferrerClient()
+                        referrerClient.endConnection()
                     }
                 }
             }
@@ -67,11 +67,10 @@ class InstallReferrerManager(
         })
     }
     
-    private fun getReferrerDetails(callback: InstallReferrerCallback) {
+    private fun getReferrerDetails(referrerClient: InstallReferrerClient, callback: InstallReferrerCallback) {
         try {
-            val response: ReferrerDetails = referrerClient?.installReferrer ?: run {
+            val response: ReferrerDetails = referrerClient.installReferrer ?: run {
                 callback.onError("Failed to get install referrer")
-                disconnectReferrerClient()
                 return
             }
             
@@ -93,12 +92,7 @@ class InstallReferrerManager(
             Log.e(TAG, "Error retrieving install referrer", e)
             callback.onError("Error retrieving install referrer: ${e.message}")
         } finally {
-            disconnectReferrerClient()
+            referrerClient.endConnection()
         }
-    }
-    
-    private fun disconnectReferrerClient() {
-        referrerClient?.endConnection()
-        referrerClient = null
     }
 }

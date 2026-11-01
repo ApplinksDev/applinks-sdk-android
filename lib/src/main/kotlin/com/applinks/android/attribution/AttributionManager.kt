@@ -174,10 +174,16 @@ internal class AttributionManager(
 
     private fun update(attributionId: String, state: State) {
         val sent = sentState()
+        // Applinks keeps the advertising ID only while ads_consent is true: it
+        // dropped the one sent without consent, or when consent was withdrawn,
+        // so it's sent again when consent is given
+        val consentGiven = state.adsConsent && !sent.adsConsent
         val body = buildJsonObject {
             if (state.adsConsent != sent.adsConsent) put("ads_consent", state.adsConsent)
             if (state.limitedDataUse != sent.limitedDataUse) put("limited_data_use", state.limitedDataUse)
-            if (state.advertisingId != sent.advertisingId) put("advertising_id", state.advertisingId)
+            if (state.advertisingId != sent.advertisingId || (consentGiven && state.advertisingId != null)) {
+                put("advertising_id", state.advertisingId)
+            }
             if (state.appVersion != null && state.appVersion != sent.appVersion) put("app_version", state.appVersion)
             if (state.osVersion != null && state.osVersion != sent.osVersion) put("os_version", state.osVersion)
         }

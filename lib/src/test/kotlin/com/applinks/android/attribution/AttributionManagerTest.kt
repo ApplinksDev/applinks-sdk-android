@@ -366,7 +366,12 @@ class AttributionManagerTest {
 
         server.enqueue(created(status = 200))
         sdk.updateConsent(adsConsent = true).await()
-        assertEquals(buildJsonObject { put("ads_consent", true) }, server.takeRequest().json())
+        val consentGiven = buildJsonObject {
+            put("ads_consent", true)
+            // Sent again: Applinks dropped it, as it came without consent
+            put("advertising_id", "38400000-8cf0-11bd-b23e-10b96e40000d")
+        }
+        assertEquals(consentGiven, server.takeRequest().json())
 
         server.enqueue(created(status = 200))
         sdk.updateConsent(adsConsent = false, limitedDataUse = true).await()
@@ -379,6 +384,44 @@ class AttributionManagerTest {
         server.enqueue(created(status = 200))
         sdk.setAdvertisingId(null).await()
         assertEquals(JsonObject(mapOf("advertising_id" to JsonNull)), server.takeRequest().json())
+    }
+
+    @Test
+    fun `sends the advertising ID again when consent is given again`() {
+        val gaid = "38400000-8cf0-11bd-b23e-10b96e40000d"
+        val sdk = reportInstall()
+
+        server.enqueue(created(status = 200))
+        sdk.updateConsent(adsConsent = true).await()
+        assertEquals(buildJsonObject { put("ads_consent", true) }, server.takeRequest().json())
+
+        server.enqueue(created(status = 200))
+        sdk.setAdvertisingId(gaid).await()
+        assertEquals(buildJsonObject { put("advertising_id", gaid) }, server.takeRequest().json())
+
+        // Withdrawing consent removes the stored ID on the server
+        server.enqueue(created(status = 200))
+        sdk.updateConsent(adsConsent = false).await()
+        assertEquals(buildJsonObject { put("ads_consent", false) }, server.takeRequest().json())
+
+        server.enqueue(created(status = 200))
+        manager().updateConsent(adsConsent = true).await() // after a restart
+        val expected = buildJsonObject {
+            put("ads_consent", true)
+            put("advertising_id", gaid)
+        }
+        assertEquals(expected, server.takeRequest().json())
+
+        // Withdrawn without an ID: none to send again
+        server.enqueue(created(status = 200))
+        sdk.setAdvertisingId(null).await()
+        assertEquals(JsonObject(mapOf("advertising_id" to JsonNull)), server.takeRequest().json())
+        server.enqueue(created(status = 200))
+        sdk.updateConsent(adsConsent = false).await()
+        server.takeRequest()
+        server.enqueue(created(status = 200))
+        sdk.updateConsent(adsConsent = true).await()
+        assertEquals(buildJsonObject { put("ads_consent", true) }, server.takeRequest().json())
     }
 
     @ParameterizedTest
@@ -406,14 +449,14 @@ class AttributionManagerTest {
         val sdk = reportInstall()
 
         server.enqueue(error(status))
-        sdk.setAdvertisingId("not-a-gaid").await()
+        sdk.updateConsent(adsConsent = false, limitedDataUse = true).await()
         nextRequest()
 
         sdk.start(freshInstall = false).await()
         assertNull(nextRequest())
 
         server.enqueue(created(status = 200))
-        sdk.updateConsent(adsConsent = true).await()
+        sdk.updateConsent(adsConsent = true, limitedDataUse = true).await()
         assertEquals(buildJsonObject { put("ads_consent", true) }, server.takeRequest().json())
     }
 
